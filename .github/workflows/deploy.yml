@@ -3,6 +3,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  release:
+    types: [published, edited, deleted]
+  workflow_run:
+    workflows: [Publish synthetic validation case]
+    types: [completed]
 permissions:
   contents: read
   pages: write
@@ -12,9 +17,12 @@ concurrency:
   cancel-in-progress: false
 jobs:
   build:
+    if: github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -22,6 +30,10 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
+      - name: Mirror Release imaging into Pages (test deployment)
+        run: node scripts/sync-pages-cases.mjs dist
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

@@ -1,7 +1,5 @@
-import type {Case,CaseRelease,ReleaseAsset} from '../../types';
-import {allPages} from './githubClient';
-import {downloadAsset,guardSize} from './releaseAssets';
-interface Release {id:number;tag_name:string;html_url:string;draft:boolean;assets:ReleaseAsset[]}
+import type {Case,CaseRelease} from '../../types';
+import {guardSize} from './releaseAssets';
 let cached: {cases:CaseRelease[];warnings:string[]}|undefined;
 export function parseCase(value:unknown):Case{
  if(!value||typeof value!=='object')throw new Error('Invalid case.json: expected an object.');
@@ -14,13 +12,23 @@ export function parseCase(value:unknown):Case{
 }
 export async function listCases(refresh=false){
  if(cached&&!refresh)return cached;
- const releases=await allPages<Release>('/releases');const cases:CaseRelease[]=[];const warnings:string[]=[];
- for(const r of releases.filter(r=>!r.draft&&r.tag_name.startsWith('case-'))){try{
-  const meta=r.assets.find(a=>a.name==='case.json'&&a.state==='uploaded');if(!meta)throw new Error('case.json missing');if(meta.size>5*1024**2)throw new Error('case.json exceeds 5 MB');
-  const c=parseCase(JSON.parse(await (await downloadAsset(meta)).text()));
-  const asset=r.assets.find(a=>a.name===c.imaging.asset_name&&a.state==='uploaded');if(!asset)throw new Error('CT asset missing');if(asset.size!==c.imaging.size)throw new Error('CT asset size does not match case.json');
-  cases.push({...c,release_id:r.id,release_url:r.html_url,tag:r.tag_name,asset});
- }catch(e){warnings.push(`${r.tag_name}: ${e instanceof Error?e.message:'Invalid case'}`);}}
+ const base=new URL('./',document.baseURI);
+ let response:Response;
+ try{response=await fetch(new URL('data/index.json',base),{cache:'no-store'});}catch{throw new Error('Cannot load the synchronized case index. Check your network.');}
+ if(!response.ok)throw new Error('Pages case synchronization is not ready. Wait for the deployment workflow, then refresh.');
+ const index=await response.json();
+ if(index.schema!=='ct-pages-index-v1'||!Array.isArray(index.cases))throw new Error('Invalid Pages case index. Run the synchronization workflow again.');
+ const cases:CaseRelease[]=[];const warnings:string[]=Array.isArray(index.warnings)?index.warnings.filter((w:unknown)=>typeof w==='string'):[];
+ for(const r of index.cases){try{
+  const c=parseCase(r);
+  if(!Number.isSafeInteger(r.release_id)||!r.asset||r.asset.size!==c.imaging.size)throw new Error('Invalid mirrored asset metadata');
+  const url=mirrorUrl(r.relative_url,base);
+  cases.push({...c,release_id:r.release_id,release_url:r.release_url,tag:r.tag,asset:{...r.asset,url}});
+ }catch(e){warnings.push(`${r.case_id||'Case'}: ${e instanceof Error?e.message:'Invalid case'}`);}}
  cached={cases,warnings};return cached;
+}
+export function mirrorUrl(relative:string,base:URL){
+ if(typeof relative!=='string'||!/^data\/cases\/\d+\/[a-f0-9]+\/imaging\.(nii(\.gz)?|zip)\.bin$/.test(relative))throw new Error('Unsafe imaging mirror path');
+ const url=new URL(relative,base);if(url.origin!==base.origin||!url.pathname.startsWith(base.pathname))throw new Error('Imaging must load from the same Pages origin');return url.href;
 }
 export async function getCase(id:number){const {cases}=await listCases();const c=cases.find(c=>c.release_id===id);if(!c)throw new Error('Case release not found.');return c;}

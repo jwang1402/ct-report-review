@@ -3,7 +3,7 @@ const base=`https://api.github.com/repos/${githubConfig.owner}/${githubConfig.re
 export let rateLimitRemaining: string|null=null;
 export async function githubRequest<T>(path:string):Promise<T>{
  let response:Response;
- try {response=await fetch(`${base}${path}`,{headers:{Accept:'application/vnd.github+json'}})} catch {throw new Error('Cannot connect to GitHub. Check your network and try again.');}
+ try {response=await fetch(`${base}${path}`,{cache:'no-store',headers:{Accept:'application/vnd.github+json'}})} catch {throw new Error('Cannot connect to GitHub. Check your network and try again.');}
  rateLimitRemaining=response.headers.get('x-ratelimit-remaining');
  if(!response.ok){
   if(response.status===403||response.status===429) throw new Error(rateLimitRemaining==='0'?'GitHub API rate limit reached. Try again after '+new Date(Number(response.headers.get('x-ratelimit-reset'))*1000).toLocaleTimeString()+'.':'GitHub denied access. Check that the repository is public.');

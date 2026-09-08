@@ -8,3 +8,5 @@ dist/
 *.dcm
 *.zip
 work/
+.qa/
+public/data/

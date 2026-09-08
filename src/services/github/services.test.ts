@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'vitest';
-import {parseCase} from './releases';
+import {parseCase,mirrorUrl} from './releases';
 import {parseReviewIssue,buildReviewIssueUrl,reviewsCSV} from './issues';
 import {guardSize} from './releaseAssets';
 import type {Review} from '../../types';
@@ -12,6 +12,7 @@ describe('GitHub review interchange',()=>{
  it('escapes multiline CSV and neutralizes spreadsheet formulas',()=>{const row={...review,comment:'=HYPERLINK("bad")\nsecond line',reviewer:'someone',github_issue_number:1,created_at:'date',url:'url'};const csv=reviewsCSV([row],new Map([['42','CT test']]));expect(csv).toContain('"\'=HYPERLINK(""bad"")\nsecond line"');expect(csv).toContain('"CT test"');});
 });
 describe('case and asset validation',()=>{
+ it('keeps imaging on the Pages origin and within the repository subpath',()=>{const base=new URL('https://jwang1402.github.io/ct-report-review/');expect(mirrorUrl('data/cases/42/abc123/imaging.nii.gz.bin',base)).toBe('https://jwang1402.github.io/ct-report-review/data/cases/42/abc123/imaging.nii.gz.bin');for(const p of ['https://evil.test/ct.nii','//evil.test/ct.nii','data/cases/../imaging.nii','data/cases/42/%2e%2e/imaging.nii'])expect(()=>mirrorUrl(p,base)).toThrow();});
  it('blocks empty and >= 2 GiB assets',()=>{expect(()=>guardSize(0)).toThrow();expect(()=>guardSize(2*1024**3)).toThrow();expect(()=>guardSize(2*1024**3-1)).not.toThrow();});
  it('rejects duplicate model report IDs',()=>{const c={schema_version:'1.0',case_id:'CT001',case_name:'Study',description:'',created_at:'2026-09-08',imaging:{type:'NIFTI',filename:'CT001.nii',asset_name:'CT001.nii',size:500},reports:[{id:'a',model_name:'A',report_name:'R',report_text:'Text'}]};expect(parseCase(c).case_id).toBe('CT001');expect(()=>parseCase({...c,reports:[...c.reports,...c.reports]})).toThrow();});
 });
