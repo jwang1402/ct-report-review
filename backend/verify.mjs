@@ -27,5 +27,19 @@ test('editing updates one record and rejects stale or unauthenticated changes',a
  const rows=(await(await call('/reviews',null,token)).json()).reviews;
  assert.equal(rows.length,1);assert.equal(rows[0].decision,'PARTIAL_ACCEPT');assert.equal(rows[0].submission_id,original.submission_id);assert.equal(rows[0].created_at,original.created_at);
 });
+test('multi-report submissions require every report and preserve retry identity',async()=>{
+ const original=globalThis.fetch;globalThis.fetch=async url=>Response.json(String(url).endsWith('removed-cases.json')?{cases:[]}:{cases:[{case_id:'multi',review_id:2,reports:[{id:'a',model_name:'A'},{id:'b',model_name:'B'}]}]});
+ try{
+ const a={schema:'ct-review-v1',case_id:'multi',release_id:2,report_id:'a',model_name:'A',reviewer:'Doctor',decision:'ACCEPT',comment:'',submission_id:crypto.randomUUID()},b={...a,report_id:'b',model_name:'B',submission_id:crypto.randomUUID()};
+ assert.equal((await call('/reviews',a,token)).status,400);
+ assert.equal((await call('/reviews/batch',{reviews:[a]},token)).status,400);
+ assert.equal((await call('/reviews/batch',{reviews:[a,{...b,decision:'PARTIAL_ACCEPT'}]},token)).status,400);
+ assert.equal((await call('/reviews/batch',{reviews:[a,a]},token)).status,400);
+ assert.equal((await(await call('/reviews',null,token)).json()).reviews.filter(r=>r.case_id==='multi').length,0);
+ assert.equal((await call('/reviews/batch',{reviews:[a,b]},token)).status,201);
+ assert.equal((await call('/reviews/batch',{reviews:[a,b]},token)).status,201);
+ assert.equal((await(await call('/reviews',null,token)).json()).reviews.filter(r=>r.case_id==='multi').length,2);
+ }finally{globalThis.fetch=original;}
+});
 test('logout revokes the session at the server',async()=>{assert.equal((await call('/logout',{},token)).status,200);assert.equal((await call('/session',null,token)).status,401);});
 
