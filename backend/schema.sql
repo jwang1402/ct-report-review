@@ -1,0 +1,15 @@
+CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY, expires INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS sessions_expiry ON sessions(expires);
+CREATE TABLE IF NOT EXISTS login_attempts (bucket TEXT PRIMARY KEY, count INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS reviews (
+ id INTEGER PRIMARY KEY AUTOINCREMENT,
+ submission_id TEXT NOT NULL UNIQUE,
+ case_id TEXT NOT NULL,
+ release_id INTEGER NOT NULL,
+ report_id TEXT NOT NULL,
+ model_name TEXT NOT NULL,
+ reviewer TEXT NOT NULL,
+ decision TEXT NOT NULL CHECK (decision IN ('ACCEPT','PARTIAL_ACCEPT','REJECT')),
+ comment TEXT NOT NULL,
+ created_at TEXT NOT NULL
+);

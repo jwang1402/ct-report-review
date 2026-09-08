@@ -1,0 +1,32 @@
+name: Register Drive case
+on:
+  issues:
+    types: [opened, edited]
+permissions:
+  contents: write
+concurrency:
+  group: drive-case-registration
+  cancel-in-progress: false
+jobs:
+  register:
+    if: startsWith(github.event.issue.title, '[CT-REGISTER] ') && github.event.issue.user.login == github.repository_owner && github.actor == github.repository_owner
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node scripts/register-drive-case.mjs
+        env:
+          CT_REGISTER_EVENT: ${{ github.event_path }}
+      - name: Save case catalog
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add public/drive-cases/index.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'Register uploaded Drive case'
+          git pull --rebase origin main
+          git push origin main

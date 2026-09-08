@@ -1,0 +1,21 @@
+{
+  "name": "ct-report-review-api",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-09-08",
+  "workers_dev": true,
+  "vars": {
+    "LOGIN_USERNAME": "admin"
+  },
+  "triggers": {
+    "crons": [
+      "0 0 * * *"
+    ]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "ct-report-reviews",
+      "database_id": "7ba96086-7a12-4651-a65c-0e8ba4189186"
+    }
+  ]
+}

@@ -37,7 +37,7 @@ export async function listCases(refresh=false){
     if(!Number.isSafeInteger(row.review_id)||row.review_id<=0||cases.some(c=>c.release_id===row.review_id||c.case_id===row.case_id))throw new Error('Duplicate or invalid Drive review ID');
     if(!/^[a-f0-9]{64}$/.test(c.imaging.sha256||''))throw new Error('Missing Drive file checksum');
     const share=`https://drive.google.com/file/d/${fileId}/view`;
-    cases.push({...c,source:'google-drive',release_id:row.review_id,release_url:share,tag:'google-drive',report_url:`https://drive.google.com/file/d/${driveFileId(drive.report_file_id)}/view`,asset:{id:row.review_id,name:c.imaging.filename,size:c.imaging.size,url:key?driveMediaUrl(fileId,key):'',browser_download_url:share,state:'uploaded',sha256:c.imaging.sha256}});
+    cases.push({...c,source:'google-drive',release_id:row.review_id,release_url:share,tag:'google-drive',report_url:`https://drive.google.com/file/d/${driveFileId(row.metadata_file_id||drive.report_file_id)}/view`,asset:{id:row.review_id,name:c.imaging.filename,size:c.imaging.size,url:key?driveMediaUrl(fileId,key):'',browser_download_url:share,state:'uploaded',sha256:c.imaging.sha256}});
    }
   }else if(driveResponse.status!==404)throw new Error('Drive index HTTP '+driveResponse.status);
  }catch(e){warnings.push(e instanceof Error?e.message:'Could not load Drive cases');}

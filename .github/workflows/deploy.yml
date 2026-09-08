@@ -6,7 +6,7 @@ on:
   release:
     types: [published, edited, deleted]
   workflow_run:
-    workflows: [Publish synthetic validation case, Remove case from website]
+    workflows: [Publish synthetic validation case, Remove case from website, Register Drive case]
     types: [completed]
 permissions:
   contents: read
@@ -29,9 +29,13 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      - run: node --test backend/verify.mjs
       - run: npm run build
         env:
           VITE_DRIVE_API_KEY: ${{ vars.DRIVE_PUBLIC_API_KEY }}
+          VITE_REVIEW_API_URL: ${{ vars.REVIEW_API_URL }}
+          VITE_GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
+          VITE_GOOGLE_PICKER_KEY: ${{ vars.GOOGLE_PICKER_KEY }}
       - name: Mirror Release imaging into Pages (test deployment)
         run: node scripts/sync-pages-cases.mjs dist
         env:
