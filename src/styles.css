@@ -12,3 +12,5 @@ input:not([type=checkbox]):not([type=range]),textarea,select{background:#fff;col
 
 
 .remove-backdrop{position:fixed;inset:0;background:#14325166;z-index:1000;display:flex;align-items:center;justify-content:center;padding:24px}.remove-dialog{width:min(560px,100%);white-space:normal;text-align:left;max-height:90vh;overflow:auto}.remove-dialog .actions{margin:18px 0}.remove-dialog small{display:block;color:var(--muted)}
+
+.home-page .summary-strip{grid-template-columns:repeat(3,minmax(0,1fr))}
