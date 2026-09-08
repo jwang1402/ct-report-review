@@ -10,7 +10,7 @@ import {downloadAsset} from '../services/github/releaseAssets';
 import type {CaseRelease} from '../types';
 import {sizeLabel,message} from '../utils';
 let initPromise:Promise<void>|undefined;
-function init(){return initPromise??=(async()=>{await cs.init();await tools.init();dicom.init({maxWebWorkers:Math.max(1,Math.min(4,(navigator.hardwareConcurrency||2)-1))});cs.imageLoader.registerImageLoader('nifti',cornerstoneNiftiImageLoader);for(const tool of [tools.WindowLevelTool,tools.PanTool,tools.ZoomTool,tools.StackScrollTool])tools.addTool(tool);})();}
+function init(){return initPromise??=(async()=>{await cs.init();await tools.init();dicom.init({useLegacyMetadataProvider:true,maxWebWorkers:Math.max(1,Math.min(4,(navigator.hardwareConcurrency||2)-1))});cs.imageLoader.registerImageLoader('nifti',cornerstoneNiftiImageLoader);for(const tool of [tools.WindowLevelTool,tools.PanTool,tools.ZoomTool,tools.StackScrollTool])tools.addTool(tool);})();}
 interface Series {uid:string;label:string;files:File[];frames:number}
 const presets:Record<string,[number,number]>={'Soft Tissue':[400,40],Lung:[1500,-600],Bone:[2000,500],Brain:[80,40]};
 const axes=[cs.Enums.OrientationAxis.AXIAL,cs.Enums.OrientationAxis.SAGITTAL,cs.Enums.OrientationAxis.CORONAL];

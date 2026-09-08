@@ -91,7 +91,7 @@ Results groups issues by case/Release and model report. It shows counts of Accep
 
 ## Design and reuse
 
-The compact neutral-dark workspace follows medical-imaging UI patterns from OHIF. `Resizable.tsx` adapts the OHIF resizable-panel wrapper composition, and `Tabs.tsx` adapts shadcn/ui's Radix wrapper pattern; styling is specific to this application. The Cornerstone viewer integration follows the upstream NIfTI and local DICOM examples. Source links and licenses are recorded in `THIRD_PARTY_NOTICES.md`.
+The white-and-blue workspace follows medical-imaging UI patterns from OHIF. `Resizable.tsx` adapts the OHIF resizable-panel wrapper composition, and `Tabs.tsx` adapts shadcn/ui's Radix wrapper pattern; styling is specific to this application. The Cornerstone viewer integration follows the upstream NIfTI and local DICOM examples. Source links and licenses are recorded in `THIRD_PARTY_NOTICES.md`.
 
 ## Temporary Pages mirror and capacity
 
