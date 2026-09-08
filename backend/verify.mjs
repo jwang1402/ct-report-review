@@ -15,4 +15,17 @@ test('reviews persist and retry does not create duplicate submissions',async()=>
  const original=globalThis.fetch;globalThis.fetch=async url=>Response.json(String(url).endsWith('removed-cases.json')?{cases:[]}:{cases:[{case_id:'sample',review_id:1,reports:[{id:'report',model_name:'Model'}]}]});
  try{const data={schema:'ct-review-v1',case_id:'sample',release_id:1,report_id:'report',model_name:'Model',reviewer:'Doctor Test',decision:'ACCEPT',comment:'Test only',submission_id:crypto.randomUUID()};assert.equal((await call('/reviews',data,token)).status,201);assert.equal((await call('/reviews',data,token)).status,201);const saved=await (await call('/reviews',null,token)).json();assert.equal(saved.reviews.length,1);assert.equal(saved.reviews[0].reviewer,'Doctor Test');assert.equal((await call('/reviews',{...data,comment:'Changed'},token)).status,409);}finally{globalThis.fetch=original;}
 });
+test('editing updates one record and rejects stale or unauthenticated changes',async()=>{
+ const original=(await(await call('/reviews',null,token)).json()).reviews[0];
+ const updated={...original,decision:'PARTIAL_ACCEPT',comment:'Revised feedback',previous:{reviewer:original.reviewer,decision:original.decision,comment:original.comment}};
+ const path='/reviews/'+original.submission_id+'/update';
+ assert.equal((await call(path,updated)).status,401);
+ assert.equal((await call(path,{...updated,comment:''},token)).status,400);
+ assert.equal((await call(path,updated,token)).status,200);
+ assert.equal((await call(path,updated,token)).status,200);
+ assert.equal((await call(path,{...updated,comment:'Stale overwrite'},token)).status,409);
+ const rows=(await(await call('/reviews',null,token)).json()).reviews;
+ assert.equal(rows.length,1);assert.equal(rows[0].decision,'PARTIAL_ACCEPT');assert.equal(rows[0].submission_id,original.submission_id);assert.equal(rows[0].created_at,original.created_at);
+});
 test('logout revokes the session at the server',async()=>{assert.equal((await call('/logout',{},token)).status,200);assert.equal((await call('/session',null,token)).status,401);});
+

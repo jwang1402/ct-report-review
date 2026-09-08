@@ -41,6 +41,18 @@ export default {async fetch(request,env){
    const after=Number(new URL(request.url).searchParams.get('after')||0);if(!Number.isSafeInteger(after)||after<0)throw new HttpError(400,'Invalid cursor');
    const {results}=await env.DB.prepare('SELECT * FROM reviews WHERE id>? ORDER BY id LIMIT 500').bind(after).all();return reply({reviews:results.map(asReview),next:results.length===500?results.at(-1).id:null});
   }
+  if(/^\/reviews\/[-\w]{16,100}\/update$/.test(path)&&request.method==='POST'){
+   const r=validateReview(await body(request));
+   if(r.submission_id!==path.split('/')[2])throw new HttpError(400,'Submission ID mismatch');
+   const original=await env.DB.prepare('SELECT * FROM reviews WHERE submission_id=?').bind(r.submission_id).first();
+   if(!original)throw new HttpError(404,'Review not found');
+   if(['case_id','release_id','report_id','model_name'].some(k=>r[k]!==original[k]))throw new HttpError(400,'Cannot move a review to another report');
+   if(['reviewer','decision','comment'].every(k=>r[k]===original[k]))return reply({review:asReview(original)});
+   if(!r.previous||!['reviewer','decision','comment'].every(k=>typeof r.previous[k]==='string'))throw new HttpError(400,'Previous review is required');
+   const saved=await env.DB.prepare('UPDATE reviews SET reviewer=?,decision=?,comment=? WHERE submission_id=? AND reviewer=? AND decision=? AND comment=? RETURNING *').bind(r.reviewer,r.decision,r.comment,r.submission_id,r.previous.reviewer,r.previous.decision,r.previous.comment).first();
+   if(!saved)throw new HttpError(409,'This review was changed elsewhere. Cancel, refresh, and edit the latest result.');
+   return reply({review:asReview(saved)});
+  }
   if(path==='/reviews'&&request.method==='POST'){
    const r=validateReview(await body(request));await knownReport(r);
    await env.DB.prepare('INSERT INTO reviews(submission_id,case_id,release_id,report_id,model_name,reviewer,decision,comment,created_at) VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(submission_id) DO NOTHING').bind(r.submission_id,r.case_id,r.release_id,r.report_id,r.model_name,r.reviewer,r.decision,r.comment,new Date().toISOString()).run();
