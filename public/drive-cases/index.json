@@ -4,81 +4,9 @@
   "cases": [
     {
       "schema_version": "1.0",
-      "case_id": "valid_1087_a_2",
-      "case_name": "valid_1087_a_2",
-      "description": "User-provided research sample; source report reproduced from cases.pdf. Model identity not specified.",
-      "created_at": "2026-09-08T00:00:00Z",
-      "imaging": {
-        "type": "NIFTI",
-        "filename": "valid_1087_a_2.nii.gz",
-        "asset_name": "valid_1087_a_2.nii.gz",
-        "size": 77653340,
-        "sha256": "e7630a7fdfc9281a900c143b5e450ec608e4344462a460ede80d498f0954b12d"
-      },
-      "reports": [
-        {
-          "id": "provided-report",
-          "model_name": "Model not specified",
-          "report_name": "Provided model-generated report",
-          "report_text": "There are consolidations in both lungs. The consolidations are more prominent on the right and\ntend to coalesce peripherally. There is a mosaic pattern observed in both lungs, with\nground-glass appearances accompanying consolidation areas. No mass or infiltrative lesion was\ndetected within the borders of non-contrast CT. Mediastinal structures could not be evaluated\noptimally because of the lack of contrast agent. Heart contour and size are normal. The widths\nof the mediastinal main vascular structures are normal. No pathologically enlarged lymph nodes\nwere detected in the mediastinum and hilar regions. Trachea and both main bronchi are open.\nNo occlusive pathology was detected in the trachea and both main bronchial lumens. No upper\nabdominal free fluid-collection or pathologically enlarged intraabdominal lymph nodes were\nobserved. No lytic-destructive lesions were detected in bone structures. Vertebral corpus\nheights are preserved. Thoracic kyphosis has increased. The neural foramina are open. In the\nexamination performed without contrast material, no pathological appearance was detected in\nother organs included in the study area."
-        }
-      ],
-      "file_id": "17up7GiGsOsiP1Klbb39hutBLx9jzhQWG",
-      "review_id": 8000001087
-    },
-    {
-      "schema_version": "1.0",
-      "case_id": "valid_881_a_1",
-      "case_name": "valid_881_a_1",
-      "description": "User-provided research sample; source report reproduced from cases.pdf. Model identity not specified.",
-      "created_at": "2026-09-08T00:00:00Z",
-      "imaging": {
-        "type": "NIFTI",
-        "filename": "valid_881_a_1.nii.gz",
-        "asset_name": "valid_881_a_1.nii.gz",
-        "size": 98160458,
-        "sha256": "9265a9e42e0ff050b23a22349ea315358e0fe1e5ce58bbe0755d7def8dd039ad"
-      },
-      "reports": [
-        {
-          "id": "provided-report",
-          "model_name": "Model not specified",
-          "report_name": "Provided model-generated report",
-          "report_text": "There are several nodules in both lungs, the largest of which is observed in the upper lobe of the\nright lung. The described nodules have a ground glass-like appearance and tend to coalesce.\nThere are also emphysematous changes in both lungs. In addition, there are areas of linear\nsubsegmental atelectasis in both lungs and pleural thickening in the left hemithorax. No mass\nwas detected in the upper abdominal sections included in the examination. A few millimetric\nnonspecific pulmonary nodules were observed in both lungs. There are no lymph nodes in\npathological size and appearance within the borders of non-contrast CT. No lytic or destructive\nlesions were detected in bone structures within the study area."
-        }
-      ],
-      "file_id": "1aXBZoe9uXQ8H5i9B-OtS37edpcINDO_9",
-      "review_id": 8000000881
-    },
-    {
-      "schema_version": "1.0",
-      "case_id": "valid_91_a_2",
-      "case_name": "valid_91_a_2",
-      "description": "User-provided research sample; source report reproduced from cases.pdf. Model identity not specified.",
-      "created_at": "2026-09-08T00:00:00Z",
-      "imaging": {
-        "type": "NIFTI",
-        "filename": "valid_91_a_2.nii.gz",
-        "asset_name": "valid_91_a_2.nii.gz",
-        "size": 145704495,
-        "sha256": "9975ba22b6401f4d7b18e0a3d97c0a967fb1a4fc0fbe97cf5f5aa4fa938ff963"
-      },
-      "reports": [
-        {
-          "id": "provided-report",
-          "model_name": "Model not specified",
-          "report_name": "Provided model-generated report",
-          "report_text": "There are consolidations in both lungs, more prominent on the right. The consolidations have a\nground glass appearance and tend to coalesce peripherally. There is also an increase in density\nconsistent with consolidation in the lower lobes of both lungs. No mass or infiltrative lesion was\ndetected within the borders of non-contrast CT. In addition, there are findings compatible with\nCovid-19 pneumonia. Other viral pneumonias can be considered in the differential diagnosis.\nClinical and laboratory correlation is recommended."
-        }
-      ],
-      "file_id": "1p5MGKMvzFIXAbzA8Af0a_bKOC5a6e-tP",
-      "review_id": 8000000091
-    },
-    {
-      "schema_version": "1.0",
-      "case_id": "CT888",
-      "case_name": "Chest",
-      "description": "NN",
+      "case_id": "Example_A",
+      "case_name": "Example A",
+      "description": "Demonstration case with four illustrative reports.",
       "created_at": "2026-09-08T07:07:40.466Z",
       "imaging": {
         "type": "NIFTI",
@@ -90,21 +18,105 @@
       "reports": [
         {
           "id": "1",
-          "model_name": "1",
+          "model_name": "morph",
           "report_name": "Chest CT",
           "report_text": "There are consolidations in both lungs. The consolidations are more prominent on the right and\ntend to coalesce peripherally. There is a mosaic pattern observed in both lungs, with\nground-glass appearances accompanying consolidation areas. No mass or infiltrative lesion was\ndetected within the borders of non-contrast CT. Mediastinal structures could not be evaluated\noptimally because of the lack of contrast agent. Heart contour and size are normal. The widths\nof the mediastinal main vascular structures are normal. No pathologically enlarged lymph nodes\nwere detected in the mediastinum and hilar regions. Trachea and both main bronchi are open.\nNo occlusive pathology was detected in the trachea and both main bronchial lumens. No upper\nabdominal free fluid-collection or pathologically enlarged intraabdominal lymph nodes were\nobserved. No lytic-destructive lesions were detected in bone structures. Vertebral corpus\nheights are preserved. Thoracic kyphosis has increased. The neural foramina are open. In the\nexamination performed without contrast material, no pathological appearance was detected in\nother organs included in the study area.\n"
         },
         {
           "id": "2",
-          "model_name": "2",
+          "model_name": "morph",
           "report_name": "Chest CT",
           "report_text": "There are several nodules in both lungs, the largest of which is observed in the upper lobe of the\nright lung. The described nodules have a ground glass-like appearance and tend to coalesce.\nThere are also emphysematous changes in both lungs. In addition, there are areas of linear\nsubsegmental atelectasis in both lungs and pleural thickening in the left hemithorax. No mass\nwas detected in the upper abdominal sections included in the examination. A few millimetric\nnonspecific pulmonary nodules were observed in both lungs. There are no lymph nodes in\npathological size and appearance within the borders of non-contrast CT. No lytic or destructive\nlesions were detected in bone structures within the study area.\n"
+        },
+        {
+          "id": "3",
+          "model_name": "morph",
+          "report_name": "Illustrative report 3",
+          "report_text": "Fictional example for interface testing; not an interpretation of this scan.\n\nFindings: Patchy bilateral lower-lobe ground-glass opacities are described in this fictional example. No pleural effusion is described.\nImpression: Nonspecific bilateral pulmonary opacities."
+        },
+        {
+          "id": "4",
+          "model_name": "morph",
+          "report_name": "Illustrative report 4",
+          "report_text": "Fictional example for interface testing; not an interpretation of this scan.\n\nFindings: Mild bibasal linear opacities and scattered small pulmonary nodules are described in this fictional example.\nImpression: Illustrative minor pulmonary findings for review workflow testing."
         }
       ],
       "file_id": "1eegt84ZJIu0wEJsCtd-NZPYOWXvwUnqX",
       "metadata_file_id": "1hxeg_4LUsIyLQ0330rdS8aZVhbRfOjet",
       "review_id": 1000000000002,
       "registration_issue": 2
+    },
+    {
+      "schema_version": "1.0",
+      "case_id": "valid_1087_a_2",
+      "case_name": "valid_1087_a_2",
+      "description": "Report reproduced from the supplied cases.pdf; model label: morph.",
+      "created_at": "2026-09-08T00:00:00Z",
+      "imaging": {
+        "type": "NIFTI",
+        "filename": "valid_1087_a_2.nii.gz",
+        "asset_name": "valid_1087_a_2.nii.gz",
+        "size": 77653340,
+        "sha256": "e7630a7fdfc9281a900c143b5e450ec608e4344462a460ede80d498f0954b12d"
+      },
+      "reports": [
+        {
+          "id": "provided-report",
+          "model_name": "morph",
+          "report_name": "Provided model-generated report",
+          "report_text": "There are consolidations in both lungs. The consolidations are more prominent on the right and\ntend to coalesce peripherally. There is a mosaic pattern observed in both lungs, with\nground-glass appearances accompanying consolidation areas. No mass or infiltrative lesion was\ndetected within the borders of non-contrast CT. Mediastinal structures could not be evaluated\noptimally because of the lack of contrast agent. Heart contour and size are normal. The widths\nof the mediastinal main vascular structures are normal. No pathologically enlarged lymph nodes\nwere detected in the mediastinum and hilar regions. Trachea and both main bronchi are open.\nNo occlusive pathology was detected in the trachea and both main bronchial lumens. No upper\nabdominal free fluid-collection or pathologically enlarged intraabdominal lymph nodes were\nobserved. No lytic-destructive lesions were detected in bone structures. Vertebral corpus\nheights are preserved. Thoracic kyphosis has increased. The neural foramina are open. In the\nexamination performed without contrast material, no pathological appearance was detected in\nother organs included in the study area."
+        }
+      ],
+      "file_id": "17up7GiGsOsiP1Klbb39hutBLx9jzhQWG",
+      "review_id": 8000001087
+    },
+    {
+      "schema_version": "1.0",
+      "case_id": "valid_881_a_1",
+      "case_name": "valid_881_a_1",
+      "description": "Report reproduced from the supplied cases.pdf; model label: morph.",
+      "created_at": "2026-09-08T00:00:00Z",
+      "imaging": {
+        "type": "NIFTI",
+        "filename": "valid_881_a_1.nii.gz",
+        "asset_name": "valid_881_a_1.nii.gz",
+        "size": 98160458,
+        "sha256": "9265a9e42e0ff050b23a22349ea315358e0fe1e5ce58bbe0755d7def8dd039ad"
+      },
+      "reports": [
+        {
+          "id": "provided-report",
+          "model_name": "morph",
+          "report_name": "Provided model-generated report",
+          "report_text": "There are several nodules in both lungs, the largest of which is observed in the upper lobe of the\nright lung. The described nodules have a ground glass-like appearance and tend to coalesce.\nThere are also emphysematous changes in both lungs. In addition, there are areas of linear\nsubsegmental atelectasis in both lungs and pleural thickening in the left hemithorax. No mass\nwas detected in the upper abdominal sections included in the examination. A few millimetric\nnonspecific pulmonary nodules were observed in both lungs. There are no lymph nodes in\npathological size and appearance within the borders of non-contrast CT. No lytic or destructive\nlesions were detected in bone structures within the study area."
+        }
+      ],
+      "file_id": "1aXBZoe9uXQ8H5i9B-OtS37edpcINDO_9",
+      "review_id": 8000000881
+    },
+    {
+      "schema_version": "1.0",
+      "case_id": "valid_91_a_2",
+      "case_name": "valid_91_a_2",
+      "description": "Report reproduced from the supplied cases.pdf; model label: morph.",
+      "created_at": "2026-09-08T00:00:00Z",
+      "imaging": {
+        "type": "NIFTI",
+        "filename": "valid_91_a_2.nii.gz",
+        "asset_name": "valid_91_a_2.nii.gz",
+        "size": 145704495,
+        "sha256": "9975ba22b6401f4d7b18e0a3d97c0a967fb1a4fc0fbe97cf5f5aa4fa938ff963"
+      },
+      "reports": [
+        {
+          "id": "provided-report",
+          "model_name": "morph",
+          "report_name": "Provided model-generated report",
+          "report_text": "There are consolidations in both lungs, more prominent on the right. The consolidations have a\nground glass appearance and tend to coalesce peripherally. There is also an increase in density\nconsistent with consolidation in the lower lobes of both lungs. No mass or infiltrative lesion was\ndetected within the borders of non-contrast CT. In addition, there are findings compatible with\nCovid-19 pneumonia. Other viral pneumonias can be considered in the differential diagnosis.\nClinical and laboratory correlation is recommended."
+        }
+      ],
+      "file_id": "1p5MGKMvzFIXAbzA8Af0a_bKOC5a6e-tP",
+      "review_id": 8000000091
     }
   ]
 }
