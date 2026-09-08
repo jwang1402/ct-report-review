@@ -6,7 +6,7 @@ on:
   release:
     types: [published, edited, deleted]
   workflow_run:
-    workflows: [Publish synthetic validation case]
+    workflows: [Publish synthetic validation case, Remove case from website]
     types: [completed]
 permissions:
   contents: read

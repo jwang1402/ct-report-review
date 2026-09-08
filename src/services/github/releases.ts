@@ -41,7 +41,11 @@ export async function listCases(refresh=false){
    }
   }else if(driveResponse.status!==404)throw new Error('Drive index HTTP '+driveResponse.status);
  }catch(e){warnings.push(e instanceof Error?e.message:'Could not load Drive cases');}
- cached={cases,warnings};return cached;
+ const removedResponse=await fetch(new URL('removed-cases.json',base),{cache:'no-store'});
+ if(!removedResponse.ok)throw new Error('Cannot verify removed cases. Refresh after deployment completes.');
+ const removed=await removedResponse.json();
+ if(removed.schema!=='ct-removed-v1'||!Array.isArray(removed.cases))throw new Error('Invalid removed case index');
+ cached={cases:cases.filter(c=>!removed.cases.some((r:{case_id:string;release_id:number})=>r.case_id===c.case_id&&r.release_id===c.release_id)),warnings};return cached;
 }
 export function driveFileId(id:unknown){if(typeof id!=='string'||! /^[\w-]{10,200}$/.test(id))throw new Error('Invalid Drive file ID');return id;}
 export function driveMediaUrl(id:string,key:string){const u=new URL('https://www.googleapis.com/drive/v3/files/'+driveFileId(id));u.searchParams.set('alt','media');u.searchParams.set('key',key);return u.href;}
