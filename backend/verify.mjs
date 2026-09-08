@@ -37,6 +37,7 @@ test('multi-report submissions require every report and preserve retry identity'
  assert.equal((await call('/reviews/batch',{reviews:[a,a]},token)).status,400);
  assert.equal((await(await call('/reviews',null,token)).json()).reviews.filter(r=>r.case_id==='multi').length,0);
  assert.equal((await call('/reviews/batch',{reviews:[a,b]},token)).status,201);
+ assert.equal((await call('/reviews/batch',{reviews:[{...a,reviewer:'Another doctor',submission_id:crypto.randomUUID()}]},token)).status,400);
  assert.equal((await call('/reviews/batch',{reviews:[a,b]},token)).status,201);
  assert.equal((await(await call('/reviews',null,token)).json()).reviews.filter(r=>r.case_id==='multi').length,2);
  }finally{globalThis.fetch=original;}
