@@ -1,0 +1,24 @@
+name: Publish synthetic validation case
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Generate synthetic NIfTI fixture
+        run: node scripts/create-test-volume.cjs
+      - name: Publish synthetic data to a Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view case-SYNTH001-validation >/dev/null 2>&1; then
+            echo "Synthetic validation case already exists; leaving it unchanged."
+          else
+            gh release create case-SYNTH001-validation work/phantom/case.json work/phantom/SYNTH001.nii.gz --title "SYNTH001 - Synthetic phantom · validation" --notes "Generated 3D NIfTI voxel phantom for application validation. NOT patient data; NOT a clinical study. Includes three explicitly labeled example reports." --prerelease
+          fi

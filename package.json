@@ -1,0 +1,6 @@
+{
+  "name": "ct-report-review", "version": "1.0.0", "private": true, "type": "module",
+  "scripts": { "dev": "vite --host 127.0.0.1", "build": "tsc -b && vite build", "preview": "vite preview --host 127.0.0.1", "test": "vitest run" },
+  "dependencies": { "@cornerstonejs/core": "5.8.2", "@cornerstonejs/tools": "5.8.2", "@cornerstonejs/dicom-image-loader": "5.8.2", "@cornerstonejs/nifti-volume-loader": "5.8.2", "@radix-ui/react-tabs": "^1.1.13", "@radix-ui/react-dialog": "^1.1.15", "react": "^19.1.1", "react-dom": "^19.1.1", "react-router-dom": "^7.9.1", "react-resizable-panels": "2.1.9", "lucide-react": "^0.468.0", "fflate": "^0.8.2", "dicom-parser": "^1.8.21" },
+  "devDependencies": { "typescript": "^5.9.2", "vite": "^7.1.7", "@vitejs/plugin-react": "^5.0.3", "@types/react": "^19.1.13", "@types/react-dom": "^19.1.9", "vitest": "^3.2.4" }
+}

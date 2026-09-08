@@ -1,0 +1,10 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.env*
+!\.env.example
+*.nii
+*.nii.gz
+*.dcm
+*.zip
+work/
