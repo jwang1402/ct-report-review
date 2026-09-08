@@ -25,8 +25,26 @@ export async function listCases(refresh=false){
   const url=mirrorUrl(r.relative_url,base);
   cases.push({...c,release_id:r.release_id,release_url:r.release_url,tag:r.tag,asset:{...r.asset,url}});
  }catch(e){warnings.push(`${r.case_id||'Case'}: ${e instanceof Error?e.message:'Invalid case'}`);}}
+ try {
+  const driveResponse=await fetch(new URL('drive-cases/index.json',base),{cache:'no-store'});
+  if(driveResponse.ok){
+   const drive=await driveResponse.json();
+   if(drive.schema!=='ct-drive-index-v1'||!Array.isArray(drive.cases))throw new Error('Invalid Drive case index');
+   const key=import.meta.env.VITE_DRIVE_API_KEY as string|undefined;
+   if(!key&&drive.cases.length)warnings.push('Drive automatic loading is not configured.');
+   for(const row of drive.cases){
+    const c=parseCase(row);const fileId=driveFileId(row.file_id);
+    if(!Number.isSafeInteger(row.review_id)||row.review_id<=0||cases.some(c=>c.release_id===row.review_id||c.case_id===row.case_id))throw new Error('Duplicate or invalid Drive review ID');
+    if(!/^[a-f0-9]{64}$/.test(c.imaging.sha256||''))throw new Error('Missing Drive file checksum');
+    const share=`https://drive.google.com/file/d/${fileId}/view`;
+    cases.push({...c,source:'google-drive',release_id:row.review_id,release_url:share,tag:'google-drive',report_url:`https://drive.google.com/file/d/${driveFileId(drive.report_file_id)}/view`,asset:{id:row.review_id,name:c.imaging.filename,size:c.imaging.size,url:key?driveMediaUrl(fileId,key):'',browser_download_url:share,state:'uploaded',sha256:c.imaging.sha256}});
+   }
+  }else if(driveResponse.status!==404)throw new Error('Drive index HTTP '+driveResponse.status);
+ }catch(e){warnings.push(e instanceof Error?e.message:'Could not load Drive cases');}
  cached={cases,warnings};return cached;
 }
+export function driveFileId(id:unknown){if(typeof id!=='string'||! /^[\w-]{10,200}$/.test(id))throw new Error('Invalid Drive file ID');return id;}
+export function driveMediaUrl(id:string,key:string){const u=new URL('https://www.googleapis.com/drive/v3/files/'+driveFileId(id));u.searchParams.set('alt','media');u.searchParams.set('key',key);return u.href;}
 export function mirrorUrl(relative:string,base:URL){
  if(typeof relative!=='string'||!/^data\/cases\/\d+\/[a-f0-9]+\/imaging\.(nii(\.gz)?|zip)\.bin$/.test(relative))throw new Error('Unsafe imaging mirror path');
  const url=new URL(relative,base);if(url.origin!==base.origin||!url.pathname.startsWith(base.pathname))throw new Error('Imaging must load from the same Pages origin');return url.href;

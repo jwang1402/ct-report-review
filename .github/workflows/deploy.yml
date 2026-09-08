@@ -30,6 +30,8 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
+        env:
+          VITE_DRIVE_API_KEY: ${{ vars.DRIVE_PUBLIC_API_KEY }}
       - name: Mirror Release imaging into Pages (test deployment)
         run: node scripts/sync-pages-cases.mjs dist
         env:
