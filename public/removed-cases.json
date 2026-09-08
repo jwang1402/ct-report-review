@@ -1,1 +1,9 @@
-{"schema":"ct-removed-v1","cases":[]}
+{
+  "schema": "ct-removed-v1",
+  "cases": [
+    {
+      "case_id": "SYNTH001",
+      "release_id": 384440825
+    }
+  ]
+}
