@@ -73,6 +73,38 @@
       ],
       "file_id": "1p5MGKMvzFIXAbzA8Af0a_bKOC5a6e-tP",
       "review_id": 8000000091
+    },
+    {
+      "schema_version": "1.0",
+      "case_id": "CT888",
+      "case_name": "Chest",
+      "description": "NN",
+      "created_at": "2026-09-08T07:07:40.466Z",
+      "imaging": {
+        "type": "NIFTI",
+        "filename": "CT888.nii",
+        "asset_name": "CT888.nii",
+        "size": 255328608,
+        "sha256": "5c355514b619061cc9f7b2ae0e23f396536be99459e5d46e46d4ada2340a660c"
+      },
+      "reports": [
+        {
+          "id": "1",
+          "model_name": "1",
+          "report_name": "Chest CT",
+          "report_text": "There are consolidations in both lungs. The consolidations are more prominent on the right and\ntend to coalesce peripherally. There is a mosaic pattern observed in both lungs, with\nground-glass appearances accompanying consolidation areas. No mass or infiltrative lesion was\ndetected within the borders of non-contrast CT. Mediastinal structures could not be evaluated\noptimally because of the lack of contrast agent. Heart contour and size are normal. The widths\nof the mediastinal main vascular structures are normal. No pathologically enlarged lymph nodes\nwere detected in the mediastinum and hilar regions. Trachea and both main bronchi are open.\nNo occlusive pathology was detected in the trachea and both main bronchial lumens. No upper\nabdominal free fluid-collection or pathologically enlarged intraabdominal lymph nodes were\nobserved. No lytic-destructive lesions were detected in bone structures. Vertebral corpus\nheights are preserved. Thoracic kyphosis has increased. The neural foramina are open. In the\nexamination performed without contrast material, no pathological appearance was detected in\nother organs included in the study area.\n"
+        },
+        {
+          "id": "2",
+          "model_name": "2",
+          "report_name": "Chest CT",
+          "report_text": "There are several nodules in both lungs, the largest of which is observed in the upper lobe of the\nright lung. The described nodules have a ground glass-like appearance and tend to coalesce.\nThere are also emphysematous changes in both lungs. In addition, there are areas of linear\nsubsegmental atelectasis in both lungs and pleural thickening in the left hemithorax. No mass\nwas detected in the upper abdominal sections included in the examination. A few millimetric\nnonspecific pulmonary nodules were observed in both lungs. There are no lymph nodes in\npathological size and appearance within the borders of non-contrast CT. No lytic or destructive\nlesions were detected in bone structures within the study area.\n"
+        }
+      ],
+      "file_id": "1eegt84ZJIu0wEJsCtd-NZPYOWXvwUnqX",
+      "metadata_file_id": "1hxeg_4LUsIyLQ0330rdS8aZVhbRfOjet",
+      "review_id": 1000000000002,
+      "registration_issue": 2
     }
   ]
 }
