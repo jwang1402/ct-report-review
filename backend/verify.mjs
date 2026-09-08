@@ -4,11 +4,11 @@ import {DatabaseSync} from 'node:sqlite';
 import {readFileSync} from 'node:fs';
 import worker,{passwordHash} from './worker.mjs';
 function database(){const db=new DatabaseSync(':memory:');db.exec(readFileSync(new URL('./schema.sql',import.meta.url),'utf8'));return {prepare(sql){const statement=db.prepare(sql);let args=[];return {bind(...a){args=a;return this;},async first(){return statement.get(...args)||null;},async all(){return {results:statement.all(...args)};},async run(){return statement.run(...args);}};},async batch(a){return Promise.all(a.map(x=>x.run()));}};}
-const env={DB:database(),LOGIN_USERNAME:'admin',PASSWORD_SALT:'unit-test-salt',PASSWORD_HASH:await passwordHash('test-password','unit-test-salt')};
+const env={DB:database(),LOGIN_USERNAME:'ctreport',PASSWORD_SALT:'unit-test-salt',PASSWORD_HASH:await passwordHash('test-password','unit-test-salt')};
 const call=(path,data,token,origin='https://jwang1402.github.io')=>worker.fetch(new Request('https://test.invalid'+path,{method:data?'POST':'GET',headers:{Origin:origin,'Content-Type':'application/json',...(token?{Authorization:'Bearer '+token}:{})},...(data?{body:JSON.stringify(data)}:{})}),env);
 let token;
 test('unauthenticated and forged sessions cannot read or write reviews',async()=>{assert.equal((await call('/reviews')).status,401);assert.equal((await call('/reviews',{},'fake')).status,401);assert.equal((await call('/session',null,'fake')).status,401);});
-test('wrong password fails; correct password creates a server session',async()=>{assert.equal((await call('/login',{username:'admin',password:'wrong'})).status,401);const r=await call('/login',{username:'admin',password:'test-password'});assert.equal(r.status,200);token=(await r.json()).token;assert.equal((await call('/session',null,token)).status,200);});
+test('wrong password fails; correct password creates a server session',async()=>{assert.equal((await call('/login',{username:'ctreport',password:'wrong'})).status,401);const r=await call('/login',{username:'ctreport',password:'test-password'});assert.equal(r.status,200);token=(await r.json()).token;assert.equal((await call('/session',null,token)).status,200);});
 test('CORS only allows configured websites',async()=>{assert.equal((await call('/session',null,token,'https://attacker.invalid')).status,403);});
 test('name and partial acceptance comment are required',async()=>{assert.equal((await call('/reviews',{schema:'ct-review-v1'},token)).status,400);});
 test('reviews persist and retry does not create duplicate submissions',async()=>{
@@ -40,6 +40,14 @@ test('multi-report submissions require every report and preserve retry identity'
  assert.equal((await call('/reviews/batch',{reviews:[a,b]},token)).status,201);
  assert.equal((await(await call('/reviews',null,token)).json()).reviews.filter(r=>r.case_id==='multi').length,2);
  }finally{globalThis.fetch=original;}
+});
+test('delete removes only the selected review, rejects stale data and allows retries',async()=>{
+ const rows=(await(await call('/reviews',null,token)).json()).reviews,r=rows[0],path='/reviews/'+r.submission_id+'/delete',data={previous:{reviewer:r.reviewer,decision:r.decision,comment:r.comment}};
+ assert.equal((await call(path,data)).status,401);
+ assert.equal((await call(path,{previous:{...data.previous,comment:'stale'}},token)).status,409);
+ assert.equal((await call(path,data,token)).status,200);
+ assert.equal((await call(path,data,token)).status,200);
+ const after=(await(await call('/reviews',null,token)).json()).reviews;assert.equal(after.length,rows.length-1);assert.ok(!after.some(x=>x.submission_id===r.submission_id));
 });
 test('logout revokes the session at the server',async()=>{assert.equal((await call('/logout',{},token)).status,200);assert.equal((await call('/session',null,token)).status,401);});
 

@@ -26,7 +26,7 @@ export default {async fetch(request,env){
    const attempt=await env.DB.prepare('INSERT INTO login_attempts(bucket,count) VALUES (?,1) ON CONFLICT(bucket) DO UPDATE SET count=count+1 RETURNING count').bind(bucket).first();
    if(attempt.count>10)throw new HttpError(429,'Too many attempts. Wait 10 minutes and try again.');
    const hash=await passwordHash(r.password,env.PASSWORD_SALT);
-   if(r.username!==(env.LOGIN_USERNAME||'admin')||!equal(hash,env.PASSWORD_HASH))throw new HttpError(401,'Incorrect username or password.');
+   if(r.username!==(env.LOGIN_USERNAME||'ctreport')||!equal(hash,env.PASSWORD_HASH))throw new HttpError(401,'Incorrect username or password.');
    const token=crypto.randomUUID()+crypto.randomUUID(),expires=now+12*3600;
    await env.DB.prepare('INSERT INTO sessions(token_hash,expires) VALUES (?,?)').bind(await digest(token),expires).run();
    return reply({token,expires});
@@ -35,7 +35,7 @@ export default {async fetch(request,env){
   if(!token||token.length>200)throw new HttpError(401,'Please sign in.');
   const hash=await digest(token),session=await env.DB.prepare('SELECT expires FROM sessions WHERE token_hash=? AND expires>?').bind(hash,now).first();
   if(!session)throw new HttpError(401,'Your session expired. Please sign in again.');
-  if(path==='/session'&&request.method==='GET')return reply({username:env.LOGIN_USERNAME||'admin',expires:session.expires});
+  if(path==='/session'&&request.method==='GET')return reply({username:env.LOGIN_USERNAME||'ctreport',expires:session.expires});
   if(path==='/logout'&&request.method==='POST'){await env.DB.prepare('DELETE FROM sessions WHERE token_hash=?').bind(hash).run();return reply({ok:true});}
   if(path==='/reviews'&&request.method==='GET'){
    const after=Number(new URL(request.url).searchParams.get('after')||0);if(!Number.isSafeInteger(after)||after<0)throw new HttpError(400,'Invalid cursor');
@@ -52,6 +52,15 @@ export default {async fetch(request,env){
    const saved=await env.DB.prepare('UPDATE reviews SET reviewer=?,decision=?,comment=? WHERE submission_id=? AND reviewer=? AND decision=? AND comment=? RETURNING *').bind(r.reviewer,r.decision,r.comment,r.submission_id,r.previous.reviewer,r.previous.decision,r.previous.comment).first();
    if(!saved)throw new HttpError(409,'This review was changed elsewhere. Cancel, refresh, and edit the latest result.');
    return reply({review:asReview(saved)});
+  }
+  if(/^\/reviews\/[-\w]{16,100}\/delete$/.test(path)&&request.method==='POST'){
+   const id=path.split('/')[2],r=await body(request);
+   if(!r.previous||!['reviewer','decision','comment'].every(k=>typeof r.previous[k]==='string'))throw new HttpError(400,'Previous review is required');
+   const existing=await env.DB.prepare('SELECT * FROM reviews WHERE submission_id=?').bind(id).first();
+   if(!existing)return reply({ok:true});
+   const deleted=await env.DB.prepare('DELETE FROM reviews WHERE submission_id=? AND reviewer=? AND decision=? AND comment=? RETURNING submission_id').bind(id,r.previous.reviewer,r.previous.decision,r.previous.comment).first();
+   if(!deleted)throw new HttpError(409,'This review changed elsewhere. Refresh before deleting.');
+   return reply({ok:true});
   }
   if(path==='/reviews/batch'&&request.method==='POST'){
    const payload=await body(request);if(!Array.isArray(payload.reviews)||!payload.reviews.length||payload.reviews.length>100)throw new HttpError(400,'Invalid review batch');
