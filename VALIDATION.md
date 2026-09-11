@@ -28,3 +28,11 @@ The three public NIfTI samples and cases.pdf all returned HTTP 200 from a creden
 public/drive-cases/index.json contains metadata only. review_id values are stable IDs in the existing review interchange format; they are not GitHub Release IDs. Keep them unchanged when updating storage paths. New Drive uploads must be added to this index before appearing. Large-scale folder discovery/paginated catalog integration is not yet deployed. CT bytes are fetched only on selecting a case, verified, and released when switching. No real CT bytes are mirrored to GitHub by this integration.
 
 11 unit tests pass, including corrupted/truncated response rejection; TypeScript and production build pass. Public deployment acceptance results will be recorded separately. No Cloudflare subscription opened.
+
+## 2026-09-11: Home entry and findings quality ratings
+
+- Login now opens the main workspace; Home is available in navigation and unknown routes fall back to it.
+- 17 frontend tests pass, including five unselected rating controls, optional comments, and separate legacy CSV/count handling.
+- 11 backend tests pass, including rating bounds, persistence/retry, edit conflicts, batch submission and legacy-preserving database migration.
+- TypeScript compilation and Vite production build pass. Build retains existing imaging-codec browser externalization and large-chunk warnings.
+- GitHub connector write access is verified. Production D1 migration completed on 2026-09-11 with the original table retained as reviews_legacy_backup_20260911. Integrity check: current_count=0, backup_count=0, missing_records=0. Worker version 5aee728f deployed through Cloudflare. Frontend rollout follows this backend deployment.

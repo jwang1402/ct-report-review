@@ -16,3 +16,17 @@ Cloudflare Workers + D1 stores server sessions and clinician reviews. The browse
 Sessions last 12 hours. Ten login attempts per IP per 10-minute bucket are allowed. Logout revokes the token at the server. New comments are kept in D1 and can be exported on Results; GitHub Issues are not used for new reviews.
 
 The website login does not make the public GitHub repository, public Pages data files, or public Drive sharing links private. The 300 GB CT dataset stays in Drive, not D1 or Workers.
+
+## Upgrade to findings quality ratings
+
+Before deploying the frontend, apply `migrations/0001_findings_rating.sql` to the existing D1 database, then deploy the updated Worker:
+
+```sh
+cd backend
+npx wrangler d1 migrations apply ct-report-reviews --remote
+npx wrangler deploy
+```
+
+New installations can apply `schema.sql` directly instead. The migration preserves review IDs, submission IDs, timestamps and legacy decisions. New reviews require a string value `1` through `5` in the existing `decision` API field, with optional comments. Legacy decisions remain visible with a Legacy label and are excluded from numeric rating counts. Editing a legacy review requires selecting a new rating. CSV includes separate `rating` and `legacy_decision` columns. Deploy the backend before merging the frontend change into main, which triggers Pages deployment.
+
+Production migration was applied through the D1 console on 2026-09-11. The old table is retained as `reviews_legacy_backup_20260911`; do not reapply this migration to that database. Worker version `5aee728f` was deployed after migration.

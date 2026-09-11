@@ -57,6 +57,8 @@ If using a fine-grained PAT with your LOCAL CLI, scope it only to the target rep
 
 ## Clinical review (Computer B)
 
+After signing in, the main workspace opens. Use a 1–5 scale to rate findings quality (1 = Poor, 5 = Excellent); comments are optional.
+
 Open the same Pages URL without the administrator's credentials, then Clinical Review. Open a published case. The app downloads the complete synchronized asset from the same Pages origin, decompresses it in memory and loads the original image values into Cornerstone3D.
 
 - Axial, sagittal and coronal MPR viewports with wheel scrolling and individual slice sliders.
@@ -87,7 +89,7 @@ Results groups issues by case/Release and model report. It shows counts of Accep
 
 ## Validation
 
-`npm test` checks metadata validation, asset boundaries, review round trips and identity parsing, partial comment rules, unrelated issue filtering, and CSV escaping. `npm run build` performs TypeScript compilation and a Vite production build. See `VALIDATION.md` for actual execution evidence and any outstanding real-data acceptance checks.
+`npm test` checks metadata validation, asset boundaries, review round trips and identity parsing, five-point rating validation, unrelated issue filtering, and CSV escaping. `npm run build` performs TypeScript compilation and a Vite production build. See `VALIDATION.md` for actual execution evidence and any outstanding real-data acceptance checks.
 
 ## Design and reuse
 

@@ -1,12 +1,12 @@
-import {useState} from 'react';
+import {useState,useId} from 'react';
 import {RefreshCw} from 'lucide-react';
 import type {CaseRelease,ModelReport,GitHubReview,Decision} from '../types';
-import {decisionLabels} from '../types';
+import {decisionLabels,ratings} from '../types';
 import {submitCaseReviews,updateReview,deleteReview} from '../services/reviews';
 type Draft={decision?:Decision;comment:string;submissionId:string};
 const empty=():Draft=>({comment:'',submissionId:crypto.randomUUID()});
-const valid=(d:Draft)=>!!d.decision&&(d.decision!=='PARTIAL_ACCEPT'||!!d.comment.trim());
-function DecisionFields({draft,change,busy}:{draft:Draft;change:(p:Partial<Draft>)=>void;busy:boolean}){return <><div className="decision-options" role="radiogroup" aria-label="Review decision">{(['ACCEPT','PARTIAL_ACCEPT','REJECT'] as const).map(value=><label key={value} className={`decision ${value} ${draft.decision===value?'chosen':''}`}><input type="radio" checked={draft.decision===value} disabled={busy} onChange={()=>change({decision:value})}/>{decisionLabels[value]}</label>)}</div><label>Comment {draft.decision==='PARTIAL_ACCEPT'?'required':'optional'}<textarea rows={3} value={draft.comment} maxLength={10000} disabled={busy} onChange={e=>change({comment:e.target.value})}/></label></>;}
+const valid=(d:Draft)=>ratings.some(value=>value===d.decision);
+function DecisionFields({draft,change,busy}:{draft:Draft;change:(p:Partial<Draft>)=>void;busy:boolean}){const groupName=useId();return <><p>Rate the quality of the findings: 1 = Poor, 5 = Excellent.</p><div className="decision-options rating-options" role="radiogroup" aria-label="Findings quality rating">{ratings.map(value=><label key={value} className={`decision rating ${draft.decision===value?'chosen':''}`}><input type="radio" name={groupName} value={value} checked={draft.decision===value} disabled={busy} onChange={()=>change({decision:value})}/>{decisionLabels[value]}</label>)}</div><label>Comment optional<textarea rows={3} value={draft.comment} maxLength={10000} disabled={busy} onChange={e=>change({comment:e.target.value})}/></label></>;}
 export function ReviewDecision({item,report,reviews,refresh}:{item:CaseRelease;report:ModelReport;reviews:GitHubReview[];refresh:()=>Promise<void>}){
  const makeDrafts=()=>Object.fromEntries(item.reports.map(r=>[r.id,empty()]));
  const [drafts,setDrafts]=useState<Record<string,Draft>>(makeDrafts),[name,setName]=useState(''),[adding,setAdding]=useState(false);
