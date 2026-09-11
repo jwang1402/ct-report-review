@@ -24,7 +24,7 @@ it('keeps submitted review labels distinct by report id',()=>{
   {id:'2',model_name:'morph',report_name:'Findings',report_text:'Second report'},
  ];
  const item={release_id:1,reports} as CaseRelease;
- const base={schema:'ct-review-v1',case_id:'case-1',release_id:1,model_name:'morph',decision:'4',reviewer:'Dr Test',comment:'',created_at:'2026-09-11T00:00:00Z',github_issue_number:1,github_issue_url:'https://example.com'};
+ const base={schema:'ct-review-v1',case_id:'case-1',release_id:1,model_name:'morph',decision:'4',reviewer:'Dr Test',comment:'',created_at:'2026-09-11T00:00:00Z',github_issue_number:1,url:'https://example.com'};
  const reviews=[
   {...base,report_id:'1',submission_id:'submission-report-1'},
   {...base,report_id:'2',submission_id:'submission-report-2'},
