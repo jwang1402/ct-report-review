@@ -12,5 +12,5 @@ CREATE TABLE reviews_rating (
  created_at TEXT NOT NULL
 );
 INSERT INTO reviews_rating SELECT * FROM reviews;
-DROP TABLE reviews;
+ALTER TABLE reviews RENAME TO reviews_legacy_backup_20260911;
 ALTER TABLE reviews_rating RENAME TO reviews;

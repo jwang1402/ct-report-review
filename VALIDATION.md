@@ -35,4 +35,4 @@ public/drive-cases/index.json contains metadata only. review_id values are stabl
 - 17 frontend tests pass, including five unselected rating controls, optional comments, and separate legacy CSV/count handling.
 - 11 backend tests pass, including rating bounds, persistence/retry, edit conflicts, batch submission and legacy-preserving database migration.
 - TypeScript compilation and Vite production build pass. Build retains existing imaging-codec browser externalization and large-chunk warnings.
-- GitHub connector write access is now verified. Production rollout is pending. Apply the D1 migration and deploy the Worker before deploying the frontend (see backend/README.md).
+- GitHub connector write access is verified. Production D1 migration completed on 2026-09-11 with the original table retained as reviews_legacy_backup_20260911. Integrity check: current_count=0, backup_count=0, missing_records=0. Worker version 5aee728f deployed through Cloudflare. Frontend rollout follows this backend deployment.

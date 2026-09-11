@@ -28,3 +28,5 @@ npx wrangler deploy
 ```
 
 New installations can apply `schema.sql` directly instead. The migration preserves review IDs, submission IDs, timestamps and legacy decisions. New reviews require a string value `1` through `5` in the existing `decision` API field, with optional comments. Legacy decisions remain visible with a Legacy label and are excluded from numeric rating counts. Editing a legacy review requires selecting a new rating. CSV includes separate `rating` and `legacy_decision` columns. Deploy the backend before merging the frontend change into main, which triggers Pages deployment.
+
+Production migration was applied through the D1 console on 2026-09-11. The old table is retained as `reviews_legacy_backup_20260911`; do not reapply this migration to that database. Worker version `5aee728f` was deployed after migration.
