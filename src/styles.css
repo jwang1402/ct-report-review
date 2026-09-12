@@ -37,4 +37,5 @@ input:not([type=checkbox]):not([type=range]),textarea,select{background:#fff;col
 .quality-rating-choice:has(input:focus-visible){outline:2px solid #2563eb;outline-offset:3px}
 .quality-rating:disabled .quality-rating-choice{opacity:.55;cursor:not-allowed}
 .quality-rating:disabled input{cursor:not-allowed}
-.quality-rating-caption{display:flex;justify-content:space-between;gap:8px;margin:8px 2px 0;color:#6b7f99;font-size:11px;line-height:1.4}
+.quality-rating-caption{display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px 12px;margin:8px 2px 0;color:#6b7f99;font-size:11px;line-height:1.4}
+.quality-rating-caption span{white-space:nowrap}

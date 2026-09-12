@@ -10,4 +10,4 @@ export type Decision = Rating|'ACCEPT'|'REJECT'|'PARTIAL_ACCEPT';
 export interface Review {schema:'ct-review-v1';case_id:string;report_id:string;model_name:string;decision:Decision;comment:string;submission_id:string;release_id:number}
 export interface GitHubReview extends Review {reviewer:string;created_at:string;github_issue_number:number;url:string}
 export interface LocalReview {decision?:Decision; comment:string; submission_id:string; status:'Local'|'Pending GitHub Submission'|'Submitted'}
-export const decisionLabels:Record<Decision,string>={'1':'1 · Poor','2':'2','3':'3','4':'4','5':'5 · Excellent',ACCEPT:'Legacy: Accept',REJECT:'Legacy: Reject',PARTIAL_ACCEPT:'Legacy: Partially Accept'};
+export const decisionLabels:Record<Decision,string>={'1':'1 · Poor','2':'2 · Fair','3':'3 · Good','4':'4 · Very good','5':'5 · Excellent',ACCEPT:'Legacy: Accept',REJECT:'Legacy: Reject',PARTIAL_ACCEPT:'Legacy: Partially Accept'};
