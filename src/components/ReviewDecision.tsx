@@ -14,10 +14,11 @@ function DecisionFields({draft,change,busy}:{draft:Draft;change:(p:Partial<Draft
   <div className="quality-rating-options" role="radiogroup" aria-label="Findings quality rating" aria-describedby={`${groupName}-help`}>
    {ratings.map(value=><label key={value} className={`quality-rating-choice ${draft.decision===value?'chosen':''}`}>
     <input type="radio" name={groupName} value={value} aria-label={`${value} out of 5, ${decisionLabels[value].split(' · ')[1]}`} checked={draft.decision===value} onChange={()=>change({decision:value})}/>
-    <span aria-hidden="true">{value}</span>
+    <span className="rating-number" aria-hidden="true">{value}</span>
+    <span className="rating-description" aria-hidden="true">{decisionLabels[value].split(' · ')[1]}</span>
    </label>)}
   </div>
-  <div className="quality-rating-caption" id={`${groupName}-help`}>{ratings.map(value=><span key={value}>{decisionLabels[value]}</span>)}</div>
+  <div className="quality-rating-caption" id={`${groupName}-help`}>{draft.decision?`Selected: ${decisionLabels[draft.decision]}`:'Select a score from 1 · Poor to 5 · Excellent'}</div>
  </fieldset><label>Comment optional<textarea rows={3} value={draft.comment} maxLength={10000} disabled={busy} onChange={e=>change({comment:e.target.value})}/></label></>;
 }
 export function ReviewDecision({item,report,reviews,refresh}:{item:CaseRelease;report:ModelReport;reviews:GitHubReview[];refresh:()=>Promise<void>}){
