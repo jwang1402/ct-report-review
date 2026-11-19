@@ -50,7 +50,7 @@ export default function DriveCaseViewer({study,publicReader=false}:{study:StudyD
     <section className="empty"><span className="empty-icon"><ScanLine size={32}/></span><h2>CT image</h2>
       <small>{study.case_id} · NIfTI · {sizeLabel(size)}</small>
       {!publicReader&&<p>Download this case from Drive with your authorized Google account. Open the .nii.gz file here to view it alongside the reports.</p>}
-      {progress?.stage==='download'&&<CTLoadProgress label="Downloading CT"
+      {progress?.stage==='download'&&<CTLoadProgress label={progress.reconnecting?'Reconnecting to CT…':'Downloading CT'}
         ratio={progress.total>0?progress.received/progress.total:undefined}
         detail={sizeLabel(progress.received)+' / '+sizeLabel(size)}/>}
       {progress?.stage==='verify'&&<CTLoadProgress label="Verifying CT file" ratio={progress.percent/100}/>}

@@ -72,7 +72,7 @@ it('keeps completed ranges when a different origin must supply the remainder',as
     ['bytes=0-4194303','bytes=4194304-4194306','bytes=4194304-4194306']);
   const sources=fetchMock.mock.calls;
   expect(new Headers(sources[0][1]?.headers).has('Authorization')).toBe(false);
-  expect(sources[2][0]).toBe('https://review.example/blind/cases/Study-Case01/image');
+  expect(sources[2][0]).toBe('https://review.example/blind/cases/Study-Case01/image?part=4194304-4194306');
   expect(new Headers(sources[2][1]?.headers).get('Authorization')).toBe('Bearer fixture-session');
 });
 
@@ -83,4 +83,28 @@ it('does not accept a different file from the review service or reuse a restrict
   fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'))
     .mockResolvedValueOnce(Response.json({error:'Case not found.'},{status:404}));
   await expect(downloadPublicDriveCase(link,expected,signal,undefined,'Other-Case02')).rejects.toThrow('Case not found');
+});
+
+it('recovers from a temporary transfer failure with a smaller range at the same offset',async()=>{
+  const stride=4*1024*1024;
+  const scan=new Uint8Array(stride*2);
+  scan.set(bytes);scan.set(bytes,stride);
+  const expected={size:scan.length,sha256:await hashBlob(new Blob([scan]))};
+  let interrupted=false;
+  const ranges:string[]=[];
+  fetchMock.mockImplementation(async(input,init)=>{
+    if(String(input).startsWith('https://www.googleapis.com/'))throw new TypeError('Failed to fetch');
+    const range=new Headers(init?.headers).get('Range')!;
+    ranges.push(range);
+    if(range.startsWith('bytes='+stride+'-')&&!interrupted){
+      interrupted=true;return new Response(null,{status:503});
+    }
+    const [start,end]=range.slice(6).split('-').map(Number);
+    return new Response(scan.subarray(start,end+1),{status:206,headers:{'Content-Range':'bytes '+start+'-'+end+'/'+scan.length}});
+  });
+  const progress:DriveImageProgress[]=[];
+  const file=await downloadPublicDriveCase(link,expected,signal,x=>progress.push(x),'Study-Case01');
+  expect(file.size).toBe(scan.length);
+  expect(ranges).toEqual(['bytes=0-4194303','bytes=4194304-8388607','bytes=4194304-6291455','bytes=6291456-8388607']);
+  expect(progress).toContainEqual({stage:'download',received:stride,total:scan.length,reconnecting:true});
 });

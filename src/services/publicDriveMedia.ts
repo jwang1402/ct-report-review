@@ -3,7 +3,7 @@ import {apiBase,sessionToken} from './session';
 
 type ExpectedImage = {size:number;sha256?:string};
 export type DriveImageProgress =
-  | {stage:'download';received:number;total:number}
+  | {stage:'download';received:number;total:number;reconnecting?:boolean}
   | {stage:'verify';percent:number};
 
 function fileRequest(link:string, query:Record<string,string>, signal:AbortSignal, range?:string) {
@@ -38,13 +38,24 @@ async function media(link:string,signal:AbortSignal,range?:string){
 }
 
 const RANGE_BYTES=4*1024*1024;
+const retryDelays=[1000,3000,7000,15000,25000];
+
+async function reconnectAfter(delay:number,signal:AbortSignal){
+  signal.throwIfAborted();
+  await new Promise<void>((resolve,reject)=>{
+    const done=()=>{signal.removeEventListener('abort',abort);resolve();};
+    const timer=setTimeout(done,delay);
+    const abort=()=>{clearTimeout(timer);reject(signal.reason);};
+    signal.addEventListener('abort',abort,{once:true});
+  });
+}
 
 async function studyMedia(caseId:string,signal:AbortSignal,range?:string) {
   const token=sessionToken();
   if(!token||!apiBase)throw new TransferError('Your review session has ended. Reopen the case to load the CT.',false);
   const headers=new Headers({Authorization:'Bearer '+token});
   if(range)headers.set('Range',range);
-  const url=apiBase+'/blind/cases/'+encodeURIComponent(caseId)+'/image';
+  const url=apiBase+'/blind/cases/'+encodeURIComponent(caseId)+'/image'+(range?'?part='+range.slice(6):'');
   const response=await fetch(url,{headers,signal,credentials:'omit',cache:'no-store',redirect:'error'});
   if(!response.ok||!response.body){
     let msg='The review service could not load this CT ('+response.status+').';
@@ -59,9 +70,9 @@ async function studyMedia(caseId:string,signal:AbortSignal,range?:string) {
 
 type PartSource=(signal:AbortSignal,range?:string)=>Promise<Response>;
 
-async function readPart(source:PartSource,total:number,start:number,signal:AbortSignal,update:(bytes:number)=>void) {
-  const end=Math.min(start+RANGE_BYTES,total)-1;
-  const range=total>RANGE_BYTES?'bytes='+start+'-'+end:undefined;
+async function readPart(source:PartSource,total:number,start:number,span:number,signal:AbortSignal,update:(bytes:number)=>void) {
+  const end=Math.min(start+span,total)-1;
+  const range=total>span||start>0?'bytes='+start+'-'+end:undefined;
   const controller=new AbortController();
   const abort=()=>controller.abort();
   signal.throwIfAborted();
@@ -112,9 +123,10 @@ export async function downloadPublicDriveCase(link:string,expected:ExpectedImage
     }
   }
   while(saved<total){
-    for(let attempt=1;;attempt++){
+    let span=RANGE_BYTES;
+    for(let retry=0;;){
       try{
-        const {offset,blob}=await readPart(source,total,saved,signal,update);
+        const {offset,blob}=await readPart(source,total,saved,span,signal,update);
         if(offset===0)parts.length=0;
         parts.push(blob);saved=offset+blob.size;break;
       }catch(e){
@@ -125,8 +137,10 @@ export async function downloadPublicDriveCase(link:string,expected:ExpectedImage
           continue;
         }
         if(e instanceof TransferError&&!e.retryable)throw e;
-        if(attempt===3)throw e instanceof TransferError?e:new Error('The connection to Google Drive was interrupted. Retry loading the CT or open the downloaded file.');
-        await new Promise(resolve=>setTimeout(resolve,attempt*350));
+        if(retry>=retryDelays.length)throw e instanceof TransferError?e:new Error('The connection to Google Drive was interrupted. Retry loading the CT or open the downloaded file.');
+        onProgress?.({stage:'download',received:saved,total,reconnecting:true});
+        span=Math.max(512*1024,span/2);
+        await reconnectAfter(retryDelays[retry++],signal);
       }
     }
   }
