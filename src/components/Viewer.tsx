@@ -1,4 +1,5 @@
 import {Expandable} from './Expandable';
+import {CTLoadProgress} from './CTLoadProgress';
 import {useEffect,useRef,useState} from 'react';
 import {ScanLine,RotateCcw,Move,ZoomIn,Contrast,Maximize2,Layers} from 'lucide-react';
 import * as cs from '@cornerstonejs/core';
@@ -19,14 +20,21 @@ const axisNames=['Axial','Sagittal','Coronal'];
 export interface ViewerStudy { case_id:string; imaging:Pick<ImagingAsset,'type'|'filename'>; asset:Pick<ReleaseAsset,'size'|'url'|'sha256'>; }
 export default function Viewer({item,privateCase=false,verifiedFile}:{item:ViewerStudy;privateCase?:boolean;verifiedFile?:File}){
  const elements=useRef<(HTMLDivElement|null)[]>([]);const engineRef=useRef<cs.RenderingEngine|null>(null);const groupRef=useRef<ReturnType<typeof tools.ToolGroupManager.createToolGroup>>(undefined);
- const [status,setStatus]=useState('Downloading imaging dataset'),[error,setError]=useState(''),[progress,setProgress]=useState(0),[ready,setReady]=useState(false);
+ const [status,setStatus]=useState('Downloading imaging dataset'),[error,setError]=useState(''),[progress,setProgress]=useState<number>(),[bytesLabel,setBytesLabel]=useState(''),[ready,setReady]=useState(false);
  const [series,setSeries]=useState<Series[]>([]),[selected,setSelected]=useState(''),[blob,setBlob]=useState<Blob|null>(null);
  const [activeTool,setActiveTool]=useState('WindowLevel'),[preset,setPreset]=useState('Soft Tissue'),[slices,setSlices]=useState<{index:number;total:number}[]>([{index:0,total:1},{index:0,total:1},{index:0,total:1}]);
  const [dimensions,setDimensions]=useState('—'),[spacing,setSpacing]=useState('—');
  const [focus,setFocus]=useState<number|null>(null);
  const [retry,setRetry]=useState(0),[localFile,setLocalFile]=useState<File|null>(null);
- useEffect(()=>{const controller=new AbortController();setReady(false);setError('');setBlob(null);setSeries([]);setSelected('');
-  (async()=>{try{setStatus(verifiedFile||localFile?'Opening selected original CT…':'Downloading imaging dataset');if(localFile&&(localFile.size!==item.asset.size||localFile.name!==item.imaging.filename))throw new Error('Select the original file named '+item.imaging.filename+' ('+sizeLabel(item.asset.size)+').');const data=verifiedFile??localFile??await downloadAsset(item.asset,(n,t)=>{setProgress(n/t);setStatus(`Downloading imaging dataset · ${sizeLabel(n)} / ${sizeLabel(t)}`);},controller.signal,privateCase?item.case_id:undefined);if(controller.signal.aborted)return;
+ useEffect(()=>{const controller=new AbortController();setReady(false);setError('');setProgress(undefined);setBytesLabel('');setBlob(null);setSeries([]);setSelected('');
+  (async()=>{try{setStatus(verifiedFile||localFile?'Opening selected original CT…':'Downloading imaging dataset');if(localFile&&(localFile.size!==item.asset.size||localFile.name!==item.imaging.filename))throw new Error('Select the original file named '+item.imaging.filename+' ('+sizeLabel(item.asset.size)+').');const data=verifiedFile??localFile??await downloadAsset(item.asset,(n,t)=>{
+    if(controller.signal.aborted)return;
+    setProgress(t>0?n/t:undefined);setBytesLabel(sizeLabel(n)+' / '+sizeLabel(t));
+   },controller.signal,privateCase?item.case_id:undefined,()=>{
+    if(!controller.signal.aborted){setProgress(undefined);setBytesLabel('');setStatus('Verifying CT file');}
+   });
+   if(controller.signal.aborted)return;
+   setProgress(undefined);setBytesLabel('');
    if(item.imaging.type==='NIFTI'){setBlob(data);return;}
    setStatus('Preparing DICOM series');const entries=await unzipFiles(new Uint8Array(await data.arrayBuffer()));const groups=new Map<string,Series>();let ignored=0,total=0;
    for(const [name,bytes] of Object.entries(entries)){if(name.endsWith('/')||name.includes('__MACOSX/')||name.split('/').pop()?.startsWith('.'))continue;total+=bytes.length;if(total>=2*1024**3)throw new Error('Expanded DICOM dataset exceeds the prototype 2 GiB memory limit.');try{const ds=dicomParser.parseDicom(bytes,{untilTag:'x7fe00010'});const uid=ds.string('x0020000e');if(!uid||!ds.uint16('x00280010')||!ds.uint16('x00280011')){ignored++;continue;}const count=Number(ds.string('x00280008')||1);const group=groups.get(uid)||{uid,label:ds.string('x0008103e')||'DICOM series',files:[],frames:0};group.files.push(new File([new Uint8Array(bytes)],name.split('/').pop()||'slice.dcm'));group.frames+=count;groups.set(uid,group);}catch{ignored++;}}
@@ -38,13 +46,25 @@ export default function Viewer({item,privateCase=false,verifiedFile}:{item:Viewe
   setReady(false);setError('');
   const clean=()=>{observers.splice(0).forEach(o=>o.disconnect());listeners.splice(0).forEach(fn=>fn());tools.ToolGroupManager.destroyToolGroup(id);engine?.destroy();engine=undefined;if(volumeId&&cs.cache.getVolume(volumeId))cs.cache.removeVolumeLoadObject(volumeId);for(const imageId of imageIds){if(cs.cache.getImageLoadObject(imageId))cs.cache.removeImageLoadObject(imageId,{force:true});}registeredFiles.splice(0).forEach(index=>dicom.wadouri.fileManager.remove(index));if(url){URL.revokeObjectURL(url);url=undefined;}if(engineRef.current?.id===id){engineRef.current=null;groupRef.current=undefined;}};
   (async()=>{try{
-   setStatus('Initializing Cornerstone3D…');await init();if(closed)return;
+   setProgress(undefined);setBytesLabel('');setStatus('Initializing CT viewer…');await init();if(closed)return;
    if(blob){setStatus('Preparing NIfTI volume…');let source=blob;const magic=new Uint8Array(await blob.slice(0,2).arrayBuffer());if(magic[0]===31&&magic[1]===139)source=new Blob([await gunzipBytes(new Uint8Array(await blob.arrayBuffer()))]);if(source.size>=2*1024**3)throw new Error('Expanded NIfTI exceeds 2 GiB.');url=URL.createObjectURL(source);imageIds.push(...await createNiftiImageIdsAndCacheMetadata({url}));}
-   else if(picked){for(let i=0;i<picked.files.length;i++){if(closed)return;const f=picked.files[i];const ds=dicomParser.parseDicom(new Uint8Array(await f.arrayBuffer()),{untilTag:'x7fe00010'});const n=Number(ds.string('x00280008')||1);const imageId=dicom.wadouri.fileManager.add(f);registeredFiles.push(Number(imageId.split(":")[1]));for(let frame=1;frame<=n;frame++){const fid=n>1?`${imageId}?frame=${frame}`:imageId;await cs.imageLoader.loadAndCacheImage(fid);imageIds.push(fid);}setStatus(`Preparing DICOM series · ${i+1} / ${picked.files.length} files`);}}
+   else if(picked){for(let i=0;i<picked.files.length;i++){if(closed)return;const f=picked.files[i];const ds=dicomParser.parseDicom(new Uint8Array(await f.arrayBuffer()),{untilTag:'x7fe00010'});const n=Number(ds.string('x00280008')||1);const imageId=dicom.wadouri.fileManager.add(f);registeredFiles.push(Number(imageId.split(":")[1]));for(let frame=1;frame<=n;frame++){const fid=n>1?`${imageId}?frame=${frame}`:imageId;await cs.imageLoader.loadAndCacheImage(fid);imageIds.push(fid);}if(!closed){setStatus('Preparing DICOM series');setProgress((i+1)/picked.files.length);setBytesLabel((i+1)+' / '+picked.files.length+' files');}}}
    if(closed)return;
    if(!imageIds.length)throw new Error('Imaging dataset contains no slices.');
-   volumeId=`cornerstoneStreamingImageVolume:${id}`;const volume=await cs.volumeLoader.createAndCacheVolume(volumeId,{imageIds});await new Promise<void>((resolve,reject)=>{volume.load((event:unknown)=>{const e=event as {success?:boolean;framesLoaded?:number;totalNumFrames?:number};if(e.success===false||e.framesLoaded!==undefined&&e.framesLoaded!==e.totalNumFrames)reject(new Error('Volume pixel loading failed.'));else resolve();});});
+   volumeId=`cornerstoneStreamingImageVolume:${id}`;const volume=await cs.volumeLoader.createAndCacheVolume(volumeId,{imageIds});
    if(closed)return;
+   setStatus('Loading CT slices');setProgress(undefined);setBytesLabel('');
+   const frameProgress=(event:Event)=>{
+    const detail=(event as cs.Types.EventTypes.ImageVolumeModifiedEvent).detail;
+    if(closed||detail.volumeId!==volumeId||detail.numberOfFrames<=0)return;
+    setProgress(detail.framesProcessed/detail.numberOfFrames);
+    setBytesLabel(detail.framesProcessed+' / '+detail.numberOfFrames+' slices');
+   };
+   cs.eventTarget.addEventListener(cs.Enums.Events.IMAGE_VOLUME_MODIFIED,frameProgress);
+   listeners.push(()=>cs.eventTarget.removeEventListener(cs.Enums.Events.IMAGE_VOLUME_MODIFIED,frameProgress));
+   await new Promise<void>((resolve,reject)=>{volume.load((event:unknown)=>{const e=event as {success?:boolean;framesLoaded?:number;totalNumFrames?:number};if(e.success===false||e.framesLoaded!==undefined&&e.framesLoaded!==e.totalNumFrames)reject(new Error('Volume pixel loading failed.'));else resolve();});});
+   if(closed)return;
+   setStatus('Rendering CT views');setProgress(undefined);setBytesLabel('');
    engine=new cs.RenderingEngine(id);engineRef.current=engine;
    engine.setViewports(axes.map((orientation,i)=>({viewportId:viewIds[i],type:cs.Enums.ViewportType.ORTHOGRAPHIC,element:elements.current[i]!,defaultOptions:{orientation,background:[0,0,0] as [number,number,number]}})));
    const group=tools.ToolGroupManager.createToolGroup(id)!;groupRef.current=group;
@@ -64,6 +84,6 @@ export default function Viewer({item,privateCase=false,verifiedFile}:{item:Viewe
  {series.length>1&&<div className="series-select"><label>Series <select value={selected} onChange={e=>setSelected(e.target.value)}>{series.map(s=><option key={s.uid} value={s.uid}>{s.label} · {s.frames} slices</option>)}</select></label></div>}
  <div className={`viewport-grid ${focus!==null?"single-plane":""}`}>{axisNames.map((name,i)=><div className="viewport-cell" key={name} style={{display:focus!==null&&focus!==i?"none":undefined}}><div className="viewport-label"><span className={`plane-dot plane-${i}`}/>{name}<span className="muted">{ready?`${slices[i].index+1} / ${slices[i].total}`:'—'}</span><button className="icon-button" aria-label={`Expand ${name}`} onClick={()=>setFocus(f=>f===i?null:i)}><Maximize2 size={12}/></button></div><div className="ct-canvas" ref={el=>{elements.current[i]=el;}} onContextMenu={e=>e.preventDefault()}/>{ready&&<><span className="orientation top">{['A','S','S'][i]}</span><span className="orientation left">{['R','A','R'][i]}</span><span className="orientation right">{['L','P','L'][i]}</span><span className="orientation bottom">{['P','I','I'][i]}</span></>}<input aria-label={`${name} slice`} className="slice-slider" type="range" min={0} max={Math.max(0,slices[i].total-1)} value={slices[i].index} disabled={!ready} onChange={e=>{void cs.utilities.jumpToSlice(elements.current[i]!,{imageIndex:Number(e.target.value)});}}/></div>)}
  <div className="study-metadata" style={{display:focus!==null?"none":undefined}}><ScanLine size={24}/><span className="eyebrow">STUDY INFORMATION</span><h3>{item.case_id}</h3><dl><dt>Format</dt><dd>{item.imaging.type}</dd><dt>Dimensions</dt><dd>{dimensions}</dd><dt>Spacing (mm)</dt><dd>{spacing}</dd><dt>Original asset</dt><dd>{sizeLabel(item.asset.size)}</dd><dt>Views</dt><dd>Axial · Sagittal · Coronal</dd></dl><p>Use the mouse wheel to navigate slices, or select Stack scroll and drag up or down.</p></div>
- {!ready&&<div className="viewer-overlay"><div>{error?<><ScanLine size={30}/><h3>Imaging could not be loaded</h3><p role="alert">{error}</p>{!privateCase&&<><div className="actions"><label className="button secondary">Open downloaded CT<input className="file-hidden" type="file" accept=".nii,.gz,.zip" onChange={e=>setLocalFile(e.target.files?.[0]||null)}/></label></div><p className="download-help">If direct loading fails, download the original file from its storage page and select it here. File name and size are checked against the published case.</p></>}<button className="text-button" onClick={()=>setRetry(v=>v+1)}>Retry direct download</button></>:<><span className="spinner large"/><h3>{status}</h3><progress max={1} value={progress}/><p>Loading original volumetric data</p></>}</div></div>}
+ {!ready&&<div className="viewer-overlay"><div>{error?<><ScanLine size={30}/><h3>Imaging could not be loaded</h3><p role="alert">{error}</p>{!privateCase&&<><div className="actions"><label className="button secondary">Open downloaded CT<input className="file-hidden" type="file" accept=".nii,.gz,.zip" onChange={e=>setLocalFile(e.target.files?.[0]||null)}/></label></div><p className="download-help">If direct loading fails, download the original file from its storage page and select it here. File name and size are checked against the published case.</p></>}<button className="text-button" onClick={()=>setRetry(v=>v+1)}>Retry direct download</button></>:<><CTLoadProgress label={status} ratio={progress} detail={bytesLabel}/></>}</div></div>}
  </div><div className="viewer-footer"><span className={ready?'live-dot':''}/>{ready?'Cornerstone3D · MPR':status}<span className="push-right">{ready?'Original data':'Preparing'}</span></div></section></Expandable>;
 }

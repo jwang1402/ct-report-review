@@ -1,0 +1,4 @@
+.reader-delete-dialog { margin: auto; width: min(30rem, 90vw); }
+.reader-delete-dialog p { margin-top: 1rem; }
+.reader-delete-dialog::backdrop { background: #14325166; }
+.reader-delete-dialog .button.delete-reader { color: white; background: #a02d28; border-color: #a02d28; }

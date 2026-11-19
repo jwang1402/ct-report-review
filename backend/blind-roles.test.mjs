@@ -138,7 +138,7 @@ test('name-only readers are isolated, even with identical names, and only see an
   const publicList=async()=>(await api('/public/studies')).json();
   assert.deepEqual(await publicList(),{studies:[]});
   const prefix='OpenStudy';
-  const admission={name:'王医生',prefix,entry_key:crypto.randomUUID()+crypto.randomUUID()};
+  const admission={name:'Dr Wang',prefix,entry_key:crypto.randomUUID()+crypto.randomUUID()};
   assert.equal((await api('/public/readers',{...admission,prefix:packet.prefix})).status,404);
   const opened={...packet,prefix,public_access:true};
   assert.equal((await api('/admin/drive-studies',opened,admin)).status,200);
@@ -147,6 +147,7 @@ test('name-only readers are isolated, even with identical names, and only see an
   const {images}=await (await api('/admin/public-studies/'+prefix+'/images',null,admin)).json();
   assert.deepEqual(images,[{case_id:prefix+'-Case01',size:321,drive_url:sample.drive_url,sha256:sample.sha256}]);
   assert.equal((await api('/public/readers',{...admission,entry_key:'guess'})).status,400);
+  assert.equal((await api('/public/readers',{...admission,name:'王医生'})).status,400);
   const first=await (await api('/public/readers',admission)).json();
   assert.equal(first.display_name,admission.name);
   assert.equal(first.public_study,prefix);
@@ -176,6 +177,16 @@ test('name-only readers are isolated, even with identical names, and only see an
   const adminRows=(await (await api('/admin/results',null,admin)).json()).results;
   assert.equal(new Set(adminRows.map(r=>r.username)).size,2);
   assert.ok(adminRows.every(r=>r.display_name===admission.name));
+  sqlite.prepare("UPDATE assignments SET comment=? WHERE username=? AND letter='A'").run('先前的评语',first.username);
+  const own=(await (await api(path,null,first.token)).json()).reports;
+  assert.equal(own[0].comment,null);
+  assert.equal((await api(path+'/ratings',{...answers,ratings:own.map(({letter,rating,comment})=>({letter,rating,comment}))},first.token)).status,200);
+  assert.equal(sqlite.prepare("SELECT comment FROM assignments WHERE username=? AND letter='A'").get(first.username).comment,'先前的评语');
+  assert.equal((await api(path+'/ratings',{...answers,ratings:answers.ratings.map(r=>({...r,comment:'新增评语'}))},first.token)).status,400);
+  sqlite.prepare('UPDATE public_readers SET display_name=? WHERE username=?').run('旧姓名',second.username);
+  const existingIdentity=await (await api('/session',null,second.token)).json();
+  assert.match(existingIdentity.display_name,/^Reader [a-f0-9]{8}$/);
+  assert.doesNotMatch(JSON.stringify(await (await api('/admin/results',null,admin)).json()),/\p{Script=Han}/u);
   assert.equal((await api('/logout',{},first.token)).status,200);
   assert.equal((await api('/public/readers',admission)).status,403);
   assert.equal((await api(path,null,first.token)).status,401);

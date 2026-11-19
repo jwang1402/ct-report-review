@@ -3,6 +3,7 @@ import {authorizeDrive,disconnectDrive,driveUploadConfigured,loadGoogle,selectDr
 import {uploadPrivateFolder} from '../services/privateDriveFolder';
 import type {StudyPackets} from '../services/studyPackets';
 import {message} from '../utils';
+import {hasHan} from '../../backend/english-ui.mjs';
 
 interface Props {
   packets:StudyPackets;
@@ -47,7 +48,7 @@ export default function DriveFolderUpload({packets,disabled,onLinks,onBusyChange
         onClick={()=>void perform(async()=>{const selected=await selectDriveFolder();if(selected.id!==folder?.id)sessions.current.clear();setFolder(selected);})}>
         Choose folder</button>}
     </div>
-    {folder&&<><p>Destination: {folder.name}</p><div className="actions">
+    {folder&&<><p>Destination: {hasHan(folder.name)?'Selected Drive folder':folder.name}</p><div className="actions">
       <button className="button primary" disabled={disabled||busy} onClick={()=>void perform(async signal=>{
         setStatus('Checking folder permissions and saved CTs…');
         const result=await uploadPrivateFolder(packets,folder.id,sessions.current,signal,setStatus,allowPublic);

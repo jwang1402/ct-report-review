@@ -1,5 +1,6 @@
 import { BlobReader, BlobWriter, ZipReader, type FileEntry } from '@zip.js/zip.js';
 import {hashBlob} from './fileHash';
+import {englishReport} from '../../backend/english-report.mjs';
 
 type Letter = 'A' | 'B' | 'C' | 'D';
 export interface PacketCase {
@@ -43,7 +44,8 @@ async function filesIn(reader: ZipReader<Blob>, signal?: AbortSignal) {
 
 async function readText(files: Map<string, FileEntry>, name: string, signal?: AbortSignal) {
   const entry = files.get(name);
-  requireThat(entry && entry.uncompressedSize > 0 && entry.uncompressedSize <= maxTextBytes, 'Missing or oversized packet entry: ' + name);
+  const label = name==='最佳报告.csv'?'case order sheet':name;
+  requireThat(entry && entry.uncompressedSize > 0 && entry.uncompressedSize <= maxTextBytes, 'Missing or oversized packet entry: ' + label);
   const decoder = new TextDecoder('utf-8', {fatal: true});
   let text = '', bytes = 0;
   await entry.getData(new WritableStream<Uint8Array>({
@@ -53,7 +55,7 @@ async function readText(files: Map<string, FileEntry>, name: string, signal?: Ab
       text += decoder.decode(data, {stream: true});
     }
   }), {...opts, signal});
-  requireThat(bytes === entry.uncompressedSize, 'Incomplete text entry: ' + name);
+  requireThat(bytes === entry.uncompressedSize, 'Incomplete text entry: ' + label);
   return (text + decoder.decode()).replace(/\r\n/g, '\n');
 }
 
@@ -118,8 +120,8 @@ async function readSharedReports(coordinator: Map<string, FileEntry>, reader: Ma
       const title = '报告 ' + letter + '\n\n';
       const model = key.get(id + '/' + letter);
       requireThat(model && blocks[i].startsWith(title), 'Missing or mismatched report letter in ' + id);
-      const text = blocks[i].slice(title.length);
-      requireThat(text.startsWith('中文参考译文\n') && text.split('\n\n英文原文\n').length === 2, 'Expected bilingual report text in ' + id);
+      const text = englishReport(blocks[i].slice(title.length));
+      requireThat(text, 'Missing the original English text for ' + id + ', Report ' + letter + '.');
       return {letter, model_name: model, text};
     });
     requireThat(new Set(reports.map(r => r.model_name)).size === 4, 'Repeated model in ' + id);

@@ -1,5 +1,7 @@
 import {adminStudy,driveImage,StudyError} from './admin-study.mjs';
-import {manageReaders} from './admin-doctor.mjs';
+import {englishReport} from './english-report.mjs';
+import {manageReaders,readerRoster} from './admin-doctor.mjs';
+import {hasHan,displayCaseName,displayReaderName,displayComment} from './english-ui.mjs';
 import {guestSession,joinStudy,listReaderStudies,publicStudyImages,setReaderAccess} from './public-readers.mjs';
 const origins = new Set(['https://jwang1402.github.io', 'http://127.0.0.1:5173', 'http://localhost:5173']);
 const encoder = new TextEncoder();
@@ -115,7 +117,7 @@ async function caseList(db, user) {
         'AND COUNT(a.letter)=4*COUNT(DISTINCT a.username) AS scored FROM private_cases c ' +
         'LEFT JOIN assignments a USING(case_id) GROUP BY c.case_id ORDER BY c.case_id');
   const {results} = await query.all();
-  return {cases: results.map(row => ({...row, scored: Boolean(row.scored)}))};
+  return {cases: results.map(row => ({...row, case_name:displayCaseName(row.case_name,row.case_id), scored: Boolean(row.scored)}))};
 }
 
 async function authorizedCase(db, user, id) {
@@ -141,12 +143,15 @@ async function caseDetails(db, user, row) {
   const drive=driveImage(row.image_key);
   const access=!doctor&&drive ? await db.prepare('SELECT enabled FROM public_studies WHERE prefix=?').bind(row.image_key.split('/')[1]).first() : null;
   return {
-    case_id: row.case_id, case_name: doctor ? row.case_id : row.case_name,
+    case_id: row.case_id, case_name: doctor ? row.case_id : displayCaseName(row.case_name,row.case_id),
     imaging: {type: 'NIFTI', filename: row.case_id + (row.image_filename.endsWith('.gz') ? '.nii.gz' : '.nii'), size: row.image_size,
       ...drive},
     ...(access?.enabled && {public_ct:true}),
-    reports: doctor ? results.map(({revision,...report})=>report) :
-      results.map(({letter,...report})=>letter ? {...report,letter} : report),
+    reports: doctor ? results.map(({letter,text,rating,comment})=>({
+      letter,text:englishReport(text),rating,comment:hasHan(comment)?null:comment
+    })) : results.map(({letter,model_name,text})=>({
+      ...(letter&&{letter}),model_name,text:englishReport(text)
+    })),
     ...(doctor && {revision:results[0]?.revision ?? 'initial'})
   };
 }
@@ -162,17 +167,22 @@ async function saveRatings(db, username, id, data) {
     if (!entry || Object.keys(entry).some(k => !['letter', 'rating', 'comment'].includes(k))
         || !letters.includes(entry.letter) || byLetter.has(entry.letter)
         || !Number.isInteger(entry.rating) || entry.rating < 1 || entry.rating > 5
-        || typeof entry.comment !== 'string' || entry.comment.length > 10000) {
+        || (entry.comment!==null && (typeof entry.comment !== 'string' || entry.comment.length > 10000))) {
       throw new HttpError(400, 'Each report needs a unique letter and a score from 1 to 5.');
     }
+    if(hasHan(entry.comment))throw new HttpError(400,'Write your review comment in English.');
     byLetter.set(entry.letter,entry);
   }
   const stamp = new Date().toISOString();
+  const originals=await db.prepare('SELECT report_text FROM private_reports WHERE case_id=?').bind(id).all();
+  if(originals.results.length!==4 || originals.results.some(r=>!englishReport(r.report_text))) {
+    throw new HttpError(409,'An English report is unavailable. Contact the study coordinator before rating this case.');
+  }
   // One transaction for the four reports. A retry with unchanged data preserves its timestamp.
   const writes=letters.map(letter => {
     const entry = byLetter.get(letter);
-    return db.prepare('UPDATE assignments SET rating=?,comment=?,updated_at=? ' +
-      "WHERE username=? AND case_id=? AND letter=? AND (rating IS NOT ? OR comment<>?) " +
+    return db.prepare('UPDATE assignments SET rating=?,comment=COALESCE(?,comment),updated_at=? ' +
+      "WHERE username=? AND case_id=? AND letter=? AND (rating IS NOT ? OR comment<>COALESCE(?,comment)) " +
       "AND COALESCE((SELECT revision FROM web_case_versions WHERE case_id=?),'initial')=?")
       .bind(entry.rating,entry.comment,stamp,username,id,letter,entry.rating,entry.comment,id,revision);
   });
@@ -222,7 +232,7 @@ export default {
     const reply = (data,status=200) => new Response(JSON.stringify(data),{status,headers});
     if (origin && !origins.has(origin)) return reply({error:'Origin not allowed'},403);
     if (request.method === 'OPTIONS') return new Response(null,{status:204,headers:{
-      ...headers,'Access-Control-Allow-Methods':'GET, HEAD, POST, PUT, OPTIONS','Access-Control-Allow-Headers':'Content-Type, Authorization, Range'
+      ...headers,'Access-Control-Allow-Methods':'GET, HEAD, POST, PUT, DELETE, OPTIONS','Access-Control-Allow-Headers':'Content-Type, Authorization, Range'
     }});
     try {
       const url = new URL(request.url);
@@ -233,7 +243,7 @@ export default {
       if (path === '/public/readers' && request.method === 'POST') return reply(await joinStudy(request,env.DB,now,{jsonBody,digest}));
       if (path === '/login' && request.method === 'POST') return reply(await login(request,env.DB,now));
       const {user,tokenHash} = await sessionFor(request,env.DB,now);
-      if (path === '/session' && request.method === 'GET') return reply(user);
+      if (path === '/session' && request.method === 'GET') return reply({...user,display_name:displayReaderName(user.display_name,user.username)});
       if (path === '/logout' && request.method === 'POST') {
         const sql=user.public_study ? 'UPDATE public_readers SET closed=1 WHERE token_hash=?' : 'DELETE FROM account_sessions WHERE token_hash=?';
         await env.DB.prepare(sql).bind(tokenHash).run();
@@ -264,14 +274,15 @@ export default {
         if ((path==='/admin/batches'||path.startsWith('/admin/batches/')) && request.method!=='GET' && !env.IMAGES) {
           throw new HttpError(503,'Activate private CT storage before uploading or publishing.');
         }
-        const managed = await manageReaders(path,request,env.DB,{jsonBody,passwordHash,HttpError});
+        const managed = await manageReaders(path,request,env.DB,{jsonBody,passwordHash,digest,HttpError});
         if (managed) return reply(managed,path==='/admin/doctors' ? 201 : 200);
         const study = await adminStudy(path,request,env,jsonBody);
         if (study) return reply(study);
         if (path === '/admin/results' && request.method === 'GET') {
           const {results} = await env.DB.prepare('SELECT a.case_id,a.username,r.display_name,a.letter,a.model_name,a.rating,a.comment,a.updated_at '+
             'FROM assignments a LEFT JOIN public_readers r USING(username) ORDER BY a.case_id,a.username,a.letter').all();
-          return reply({results});
+          const readers=await readerRoster(env.DB,digest,displayReaderName);
+          return reply({readers,results:results.map(r=>({...r,display_name:displayReaderName(r.display_name,r.username),comment:displayComment(r.comment)}))});
         }
       }
       if (path === '/reviews' || path.startsWith('/reviews/')) {
@@ -280,7 +291,10 @@ export default {
         const after = Number(url.searchParams.get('after') || 0);
         if (!Number.isSafeInteger(after) || after < 0) throw new HttpError(400,'Invalid cursor');
         const {results} = await env.DB.prepare('SELECT * FROM reviews WHERE id>? ORDER BY id LIMIT 500').bind(after).all();
-        return reply({reviews:results.map(r => ({...r,schema:'ct-review-v1',github_issue_number:1000000000000+r.id,url:''})),
+        return reply({reviews:results.map(r => ({...r,reviewer:hasHan(r.reviewer)?'Legacy reader':r.reviewer,
+          comment:displayComment(r.comment),case_id:hasHan(r.case_id)?'Case '+r.release_id:r.case_id,
+          model_name:hasHan(r.model_name)?'Model':r.model_name,report_id:hasHan(r.report_id)?'Report':r.report_id,
+          schema:'ct-review-v1',github_issue_number:1000000000000+r.id,url:''})),
           next:results.length === 500 ? results.at(-1).id : null});
       }
       throw new HttpError(404,'Not found');

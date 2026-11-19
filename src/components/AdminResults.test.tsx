@@ -19,3 +19,8 @@ it('counts completed cases per reader across four letters and keeps namesakes se
   expect([one.completed,one.assigned,one.mean]).toEqual([1,2,'4.00']);
   expect([two.completed,two.assigned,two.mean]).toEqual([0,2,'2.00']);
 });
+
+it('includes readers who have no assigned cases in the administrator list',()=>{
+  const readers=summarizeReaders([], [{username:'doctor',display_name:null,version:'example-version'}]);
+  expect(readers).toEqual([{id:'doctor',name:'doctor',assigned:0,completed:0,mean:'—'}]);
+});

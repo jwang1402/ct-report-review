@@ -97,7 +97,11 @@ input:not([type=checkbox]):not([type=range]),textarea,select{background:#fff;col
 .study-panel>label { max-width: 28rem; }
 .study-panel .packet-files { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(205px,100%),1fr)); gap: 16px; margin-bottom: 14px; }
 .packet-files small { font-weight: 400; color: #52677e; }
-.packet-files input { width: 100%; min-width: 0; }
+.packet-files .zip-picker { position: relative; justify-self: start; }
+.packet-files .zip-picker input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.zip-picker:focus-within { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 6px; }
+.zip-picker:has(input:disabled) { opacity: .6; }
+.packet-files small { overflow-wrap: anywhere; }
 .study-panel details { margin-top: 18px; }
 .study-panel summary { cursor: pointer; color: #204e81; font-weight: 600; }
 .drive-file-links {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,17rem),1fr));gap:12px 18px;}

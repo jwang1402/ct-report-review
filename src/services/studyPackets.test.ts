@@ -46,7 +46,7 @@ describe('shared reader packet import', () => {
     expect(packets.cases[1].reports.map(r => r.model_name)).toEqual([...ids.slice(1), ids[0]]);
     for (const c of packets.cases) {
       expect(c.reports.map(r => r.letter)).toEqual(letters);
-      expect(c.reports[2].text).toBe('中文参考译文\n研究示例\n\n英文原文\nSynthetic ' + c.case_id + ' findings C.');
+      expect(c.reports[2].text).toBe('Synthetic ' + c.case_id + ' findings C.');
       expect(c.size).toBe(imageBytes.length);
       const b = await packets.getImage(c.case_id);
       expect(new Uint8Array(await b.arrayBuffer())).toEqual(imageBytes);

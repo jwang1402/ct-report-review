@@ -69,7 +69,6 @@ function WorkspaceGate({children}:{children:(user:Identity)=>ReactNode}) {
   if(role==='doctor'&&pathname!=='/doctor/account')return <PublicReaderEntry onStart={setUser}/>;
   return <main className="login-page"><form className="form-card login-card" onSubmit={signIn}>
     <ScanLine size={30}/><h1>{pathname.startsWith('/admin')?'Administrator sign-in':'CT Report Review'}</h1>
-    <p>Sign in with your assigned study account.</p>
     <label>Username<input autoComplete="username" required value={username} onChange={e=>setUsername(e.target.value)}/></label>
     <label>Password<input autoComplete="current-password" type="password" required value={password} onChange={e=>setPassword(e.target.value)}/></label>
     {error && <p role="alert" className="error">{error}</p>}

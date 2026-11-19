@@ -20,7 +20,7 @@ function Workspace({user}:{user:Identity}) {
       <Link className="brand" to={home}><span className="brand-icon"><ScanLine size={22}/></span><div>CT Report Review<small>CLINICAL RESEARCH</small></div></Link>
       <nav aria-label="Study">
         <NavLink to={home} end><ScanLine size={15}/>Home</NavLink>
-        <NavLink to={home+'/cases'}><FolderOpen size={15}/>Clinical Review</NavLink>
+        {isAdmin&&<NavLink to="/admin/cases"><FolderOpen size={15}/>Clinical Review</NavLink>}
         {isAdmin&&<NavLink to="/admin/upload"><Plus size={15}/>Upload Case</NavLink>}
         {isAdmin&&<NavLink to="/admin/results"><Activity size={15}/>Results</NavLink>}
       </nav>
@@ -31,7 +31,7 @@ function Workspace({user}:{user:Identity}) {
     <Suspense fallback={<p className="page" role="status">Loading…</p>}>
       <Routes>
         <Route path={home} element={<StudyHome role={user.role}/>}/>
-        <Route path={home+'/cases'} element={<StudyList role={user.role}/>}/>
+        <Route path={home+'/cases'} element={isAdmin?<StudyList role={user.role}/>:<Navigate to="/doctor" replace/>}/>
         <Route path={home+'/cases/:caseId'} element={<BlindCase role={user.role} publicReader={!!user.public_study}/>}/>
         {isAdmin&&<Route path="/admin/upload" element={<AdminUpload/>}/>}
         {isAdmin&&<Route path="/admin/readers" element={<DoctorAccounts/>}/>}
@@ -40,7 +40,7 @@ function Workspace({user}:{user:Identity}) {
         {isAdmin&&<Route path="/admin/archive" element={<LegacyWorkspace/>}/>}
         {isAdmin&&<Route path="/results" element={<Navigate to="/admin/results" replace/>}/>}
         {isAdmin&&<Route path="/upload" element={<Navigate to="/admin/upload" replace/>}/>}
-        <Route path="/cases" element={<Navigate to={home+'/cases'} replace/>}/>
+        <Route path="/cases" element={<Navigate to={isAdmin?'/admin/cases':'/doctor'} replace/>}/>
         <Route path="*" element={<Navigate to={home} replace/>}/>
       </Routes>
     </Suspense>

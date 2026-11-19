@@ -1,6 +1,9 @@
 import {driveFileId,verifyCaseVolume} from './restrictedDrive';
 
 type ExpectedImage = {size:number;sha256?:string};
+export type DriveImageProgress =
+  | {stage:'download';received:number;total:number}
+  | {stage:'verify';percent:number};
 
 function fileRequest(link:string, query:Record<string,string>, signal:AbortSignal, range?:string) {
   const id=driveFileId(link);
@@ -28,11 +31,12 @@ async function media(link:string,signal:AbortSignal,range?:string){
   return response;
 }
 
-export async function downloadPublicDriveCase(link:string,expected:ExpectedImage,signal:AbortSignal) {
+export async function downloadPublicDriveCase(link:string,expected:ExpectedImage,signal:AbortSignal,onProgress?:(progress:DriveImageProgress)=>void) {
+  onProgress?.({stage:'download',received:0,total:expected.size});
   const response=await media(link,signal);
   const reader=response.body!.getReader();
   const parts:ArrayBuffer[]=[];
-  let size=0;
+  let size=0, lastUpdate=0;
   try {
     for(;;){
       const chunk=await reader.read();
@@ -40,10 +44,16 @@ export async function downloadPublicDriveCase(link:string,expected:ExpectedImage
       size+=chunk.value.byteLength;
       if(size>expected.size)throw new Error('The Drive file is larger than the verified case image.');
       parts.push(new Uint8Array(chunk.value).buffer);
+      const now=performance.now();
+      if(size===expected.size||now-lastUpdate>=100){
+        onProgress?.({stage:'download',received:size,total:expected.size});
+        lastUpdate=now;
+      }
     }
   } finally {await reader.cancel();reader.releaseLock();}
   const file=new File(parts,'study-ct.nii.gz',{type:'application/gzip'});
-  await verifyCaseVolume(file,expected,signal);
+  onProgress?.({stage:'verify',percent:0});
+  await verifyCaseVolume(file,expected,signal,percent=>onProgress?.({stage:'verify',percent}));
   return file;
 }
 

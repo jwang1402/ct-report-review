@@ -10,6 +10,7 @@ import {verifyPublicDriveCase} from '../services/publicDriveMedia';
 import DriveLinks from './DriveLinks';
 import DriveFolderUpload from './DriveFolderUpload';
 import PublicStudyAccess from './PublicStudyAccess';
+import {hasHan} from '../../backend/english-ui.mjs';
 
 const inputs=[
   {key:'images',label:'CT volumes',filename:'Reader_Images.zip'},
@@ -104,10 +105,12 @@ export default function AdminUpload() {
     <section className="work-card study-panel"><h2>Study files</h2>
       <div className="packet-files">{inputs.map(input=><label key={input.key}>
         <strong>{input.label}</strong><small>{input.filename}</small>
-        <input type="file" accept=".zip" disabled={!!busy||driveBusy} onChange={e=>{
+        <span className="zip-picker"><span className="button secondary" aria-hidden="true">Choose ZIP</span>
+        <input aria-label={input.label} aria-describedby={'zip-status-'+input.key} title={'Choose '+input.label+' ZIP'} type="file" accept=".zip" disabled={!!busy||driveBusy} onChange={e=>{
           const file=e.target.files?.[0];
           setFiles(f=>({...f,[input.key]:file}));setPackets(null);setPublicAccess(false);setRestricted(false);setLinks({});setProgress(null);setError('');setPhase('');
-        }}/>
+        }}/></span>
+        <small id={'zip-status-'+input.key} aria-live="polite">{files[input.key]?(hasHan(files[input.key]?.name)?'ZIP selected':files[input.key]?.name):'No file selected'}</small>
       </label>)}</div>
       {!packets&&<div className="actions"><button className="button secondary" disabled={!!busy||inputs.some(x=>!files[x.key])} onClick={()=>void verify()}>Verify files</button>
         {busy==='verify'&&<span role="status">{phase}</span>}</div>}

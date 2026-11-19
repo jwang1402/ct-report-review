@@ -53,6 +53,11 @@ test('linked Drive CTs publish without R2 and expose the file link and digest on
     assert.equal(saved.body.state,'published');
     assert.equal(saved.body.existing,i!==0);
   }
+  const oldBatch=JSON.parse(sqlite.prepare('SELECT manifest FROM web_batches WHERE prefix=?').get(study.prefix).manifest);
+  for(const c of oldBatch.cases) for(const r of c.reports) r.text='中文参考译文\n示例\n\n英文原文\n'+r.text;
+  sqlite.prepare('UPDATE web_batches SET manifest=? WHERE prefix=?').run(JSON.stringify(oldBatch),study.prefix);
+  const resumed=await call(endpoint,'a',study);
+  assert.equal(resumed.status,200,resumed.body.error);assert.equal(resumed.body.existing,true);
   assert.equal((await call(caseUrl,'c')).status,404);
   assert.equal((await call(caseUrl+'/image','c')).status,404);
   const {body}=await call(caseUrl,'b');
@@ -160,14 +165,22 @@ test('admin uploads verified chunks, publishes atomically, edits before rating a
   }
   const detail='/blind/cases/Test-Case01';
   const before=await call(detail,'b'); assert.equal(before.reports[0].text,'sample report 0');
+  const oldText='中文参考译文\r\n测试\r\n\r\n英文原文\r\nsample report 1';
+  sqlite.prepare('UPDATE private_reports SET report_text=? WHERE case_id=? AND model_name=?').run(oldText,'Test-Case01','M3D-LaMed-Phi-3-4B');
+  sqlite.prepare('UPDATE private_cases SET case_name=? WHERE case_id=?').run('测试','Test-Case01');
+  for (const role of ['a','b']) assert.equal((await call(detail,role)).reports[1].text,'sample report 1');
   const edit='/admin/cases/Test-Case01/editor';
   assert.equal((await call(edit,'b')).code,403);
   const dto=await call(edit,'a');
   assert.equal(dto.reports[0].model_name,'MORPH-CT');
-  const changes={reports:dto.reports,case_name:'New display',revision:dto.revision};
+  assert.equal(dto.reports[1].text,'sample report 1');
+  assert.equal(dto.case_name,'Test-Case01');
+  const changes={reports:dto.reports,case_name:dto.case_name,revision:dto.revision};
   changes.reports[0].text='revised report';
   const applied=await call(edit,'a','POST',changes);
   assert.equal(applied.code,200,applied.error);
+  assert.equal(sqlite.prepare('SELECT report_text FROM private_reports WHERE case_id=? AND model_name=?').get('Test-Case01','M3D-LaMed-Phi-3-4B').report_text,oldText);
+  assert.equal(sqlite.prepare('SELECT case_name FROM private_cases WHERE case_id=?').get('Test-Case01').case_name,'测试');
   assert.notEqual(applied.revision,before.revision);
   assert.equal((await call(edit,'a','POST',changes)).code,409);
   const form={ratings:reports.map(r=>({letter:r.letter,rating:4,comment:''})),revision:before.revision};

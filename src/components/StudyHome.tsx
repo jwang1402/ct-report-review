@@ -23,12 +23,12 @@ export default function StudyHome({role}:{role:Identity['role']}) {
       <div className="section-heading"><h2>Case workspace</h2><span className="muted">Published studies</span>
         <button className="button secondary push-right" disabled={!data&&!error} onClick={refresh}><RefreshCw size={14}/>Refresh Cases</button>
       </div>
-      {error?<p className="global-error" role="alert">{error}</p>:cases?<CaseTable role={role} cases={cases} compact/>:
+      {error?<p className="global-error" role="alert">{error}</p>:cases?<CaseTable role={role} cases={cases} compact={admin} scrollable={!admin}/>:
         <div className="empty" role="status"><span className="spinner"/><p>Loading published cases…</p></div>}
     </section>
-    <div className="home-bottom">
+    {admin&&<div className="home-bottom">
       <Link to={library}><ScanLine size={20}/><div><h3>Clinical Review</h3><p>Inspect the CT study and evaluate each model report.</p></div><ArrowUpRight size={20}/></Link>
-      {admin&&<Link to="/admin/results"><Activity size={20}/><div><h3>Review results</h3><p>Explore individual ratings and export reviewer feedback.</p></div><ArrowUpRight size={20}/></Link>}
-    </div>
+      <Link to="/admin/results"><Activity size={20}/><div><h3>Review results</h3><p>Explore individual ratings and export reviewer feedback.</p></div><ArrowUpRight size={20}/></Link>
+    </div>}
   </main>;
 }

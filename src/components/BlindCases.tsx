@@ -3,6 +3,7 @@ import {Link,useParams} from 'react-router-dom';
 import {ArrowLeft,ChevronRight,Download,FileText,PanelLeftClose,Plus,RefreshCw,ScanLine} from 'lucide-react';
 import {caseEndpoint,useStudyData,type StudyListItem,type StudyDetail,type ReaderReport,type NamedReport,type StudyResult} from '../services/blindStudy';
 import {api,ResponseError} from '../services/session';
+import {inCaseOrder} from '../services/caseOrder';
 import {message,saveFile} from '../utils';
 import {decisionLabels,ratings} from '../types';
 import {ViewerBoundary} from './ViewerBoundary';
@@ -17,11 +18,13 @@ const Viewer=lazy(()=>import('./Viewer'));
 type Role=Identity['role'];
 const caseLink=(role:Role,id:string)=>'/'+role+'/cases/'+encodeURIComponent(id);
 
-export function CaseTable({role,cases,compact=false}:{role:Role;cases:StudyListItem[];compact?:boolean}) {
+export function CaseTable({role,cases,compact=false,scrollable=false}:{role:Role;cases:StudyListItem[];compact?:boolean;scrollable?:boolean}) {
   if(!cases.length)return <div className="empty"><div className="empty-icon"><ScanLine size={32}/></div><h2>No cases available</h2>
     {role==='admin'?<Link className="button primary" to="/admin/upload"><Plus size={16}/>Upload Case</Link>:<p>Your study cases will appear here.</p>}</div>;
-  return <div className="table-scroll"><table><thead><tr><th>Case / study</th><th>Imaging</th><th>Reports</th><th>Review status</th><th/></tr></thead>
-    <tbody>{(compact?cases.slice(0,5):cases).map(c=><tr key={c.case_id}>
+  const ordered=inCaseOrder(cases);
+  return <div className={'table-scroll'+(scrollable?' case-workspace-scroll':'')} role={scrollable?'region':undefined}
+    aria-label={scrollable?'Case list':undefined} tabIndex={scrollable?0:undefined}><table><thead><tr><th>Case / study</th><th>Imaging</th><th>Reports</th><th>Review status</th><th/></tr></thead>
+    <tbody>{(compact?ordered.slice(0,5):ordered).map(c=><tr key={c.case_id}>
       <td><Link className="case-title" to={caseLink(role,c.case_id)}><span className="study-icon"><ScanLine size={19}/></span><span>
         <strong>{c.case_name}</strong>{c.case_id!==c.case_name&&<small>{c.case_id}</small>}</span></Link></td>
       <td><span className="format-badge">NIfTI</span></td><td>4 reports</td>
@@ -56,8 +59,8 @@ function ReportFrame({caseId,items,selected,select,summary,children,control}:{ca
       <TabsTrigger key={r.id} value={r.id}>{r.label}</TabsTrigger>)}</TabsList>
       {items.map(r=><TabsContent key={r.id} value={r.id} className="report-content">
         <span className="eyebrow">AI-GENERATED REPORT</span><div className="report-title"><h3>{r.label}</h3>
-          <button className="icon-button" title="Download Report" aria-label={'Download '+r.label} onClick={()=>saveFile(r.text,caseId+'-'+r.id+'.txt')}><Download size={16}/></button></div>
-        <div className="report-text" style={{fontSize:font}}>{r.text}</div>
+          <button className="icon-button" disabled={!r.text} title="Download Report" aria-label={'Download '+r.label} onClick={()=>saveFile(r.text,caseId+'-'+r.id+'.txt')}><Download size={16}/></button></div>
+        <div className="report-text" style={{fontSize:font}}>{r.text||'The English report is unavailable. Please contact the study coordinator.'}</div>
       </TabsContent>)}</Tabs>
     <button className="review-collapse" aria-expanded={!hidden} aria-controls="review-body" onClick={()=>setHidden(v=>!v)}>{hidden?'▲ Show reviews':'▼ Hide reviews'}</button>
     <div id="review-body" className="review-body" hidden={hidden}>{children}</div>
@@ -75,6 +78,7 @@ function DoctorReports({id,reports,revision,reload,onSaved}:{id:string;reports:R
   const draft=drafts.find(r=>r.letter===selected)!;
   const dirty=drafts.some((r,i)=>r.rating!==saved[i].rating||r.comment!==saved[i].comment);
   const complete=drafts.filter(r=>r.rating!==null).length;
+  const missingOriginal=drafts.some(r=>!r.text);
   useEffect(()=>{
     if(!dirty)return;
     const warn=(e:BeforeUnloadEvent)=>{e.preventDefault();e.returnValue='';};
@@ -85,7 +89,7 @@ function DoctorReports({id,reports,revision,reload,onSaved}:{id:string;reports:R
     setDrafts(rows=>rows.map(row=>row.letter===selected?{...row,...changes}:row));setNotice('');
   }
   async function submit() {
-    if(busy||complete!==4||!dirty)return;
+    if(busy||complete!==4||!dirty||missingOriginal)return;
     setBusy(true);setError('');
     try{
       await api(caseEndpoint(id)+'/ratings',{method:'POST',body:JSON.stringify({revision,ratings:drafts.map(({letter,rating,comment})=>({letter,rating,comment}))})});
@@ -96,16 +100,16 @@ function DoctorReports({id,reports,revision,reload,onSaved}:{id:string;reports:R
     summary={complete+' / 4 rated'}>
     <div className="decision-panel"><div className="section-heading"><h3>Your review</h3></div>
       <section className="reviewer-group"><h3>Report {selected} · Review</h3>
-        <fieldset className="quality-rating" disabled={busy}><legend>Findings quality</legend>
+        <fieldset className="quality-rating" disabled={busy||!draft.text}><legend>Findings quality</legend>
           <div className="quality-rating-options">{ratings.map(value=><label key={value} className={'quality-rating-choice '+(draft.rating===Number(value)?'chosen':'')}>
             <input type="radio" name={'rating-'+selected} value={value} checked={draft.rating===Number(value)} onChange={()=>edit({rating:Number(value)})}/>
             <span className="rating-number">{value}</span><span className="rating-description">{decisionLabels[value].split(' · ')[1]}</span>
           </label>)}</div>
           <div className="quality-rating-caption">{draft.rating?'Selected: '+decisionLabels[String(draft.rating) as typeof ratings[number]]:'Select a score from 1 · Poor to 5 · Excellent'}</div>
         </fieldset>
-        <label>Comment (optional)<textarea value={draft.comment} disabled={busy} maxLength={10000} rows={3} onChange={e=>edit({comment:e.target.value})}/></label>
-        <p role="status">{notice||complete+' / 4 reports ready. Switch report tabs to review each report.'}</p>
-        <button className="button primary full" disabled={outdated||busy||!dirty||complete!==4} onClick={()=>void submit()}>{busy?'Saving…':'Save four ratings'}</button>
+        <label>Comment (optional)<textarea value={draft.comment??''} placeholder={draft.comment===null?'A previous comment is saved. Type in English to replace it.':'Write in English'} disabled={busy} maxLength={10000} rows={3} onChange={e=>edit({comment:e.target.value})}/></label>
+        <p role="status">{notice||(missingOriginal?'Ratings can be submitted when all four English reports are available.':complete+' / 4 reports ready. Switch report tabs to review each report.')}</p>
+        <button className="button primary full" disabled={outdated||busy||!dirty||complete!==4||missingOriginal} onClick={()=>void submit()}>{busy?'Saving…':'Save four ratings'}</button>
       </section>
       {error&&<p role="alert" className="error">{error}</p>}{outdated&&<button className="button secondary" onClick={reload}>Reload updated reports and rate again</button>}
     </div>
@@ -134,8 +138,8 @@ export function BlindCase({role,publicReader=false}:{role:Role;publicReader?:boo
   const {caseId=''}=useParams();
   const {data,error,refresh}=useStudyData<StudyDetail>(caseEndpoint(caseId));
   const library=useStudyData<{cases:StudyListItem[]}>('/blind/cases');
-  const cases=library.data?.cases??[];
-  const back='/'+role+'/cases';
+  const cases=inCaseOrder(library.data?.cases??[]);
+  const back=role==='doctor'?'/doctor':'/admin/cases';
   if(!data)return <main className="page"><div className="empty"><ScanLine size={32}/><h2>{error||'Loading case…'}</h2>
     {error&&<button className="button secondary" onClick={refresh}>Retry</button>}<Link className="button secondary" to={back}>Back to cases</Link></div></main>;
   const doctorReports=data.reports.filter((r):r is ReaderReport=>!('model_name' in r)).sort((a,b)=>a.letter.localeCompare(b.letter));

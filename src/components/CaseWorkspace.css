@@ -21,3 +21,18 @@
   .clinical-case .review-layout > [data-panel]:last-child { height: 85vh; min-height: 560px; }
   .clinical-case .review-topbar { min-width: 0; flex-wrap: wrap; height: auto; min-height: 46px; }
 }
+.table-scroll.case-workspace-scroll {
+  max-height: clamp(14rem, 43vh, 23rem);
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+.case-workspace-scroll thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface2, #f1f5fb);
+}
+.case-workspace-scroll:focus-visible {
+  outline: 2px solid var(--accent, #2866ce);
+  outline-offset: -2px;
+}

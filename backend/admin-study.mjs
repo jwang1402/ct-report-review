@@ -1,3 +1,6 @@
+import {englishReport} from './english-report.mjs';
+import {displayCaseName,hasHan} from './english-ui.mjs';
+
 const PART_BYTES = 8 * 1024 * 1024;
 const letters = ['A','B','C','D'];
 const prefixPattern = /^[A-Za-z0-9][A-Za-z0-9_-]{0,39}$/;
@@ -18,7 +21,9 @@ function validateReports(reports) {
   const sorted = reports.map(r => {
     check(r && letters.includes(r.letter) && validString(r.model_name,100) && validString(r.text,48000),
       400,'Each report needs a letter, a model and text.');
-    return {letter:r.letter,model_name:r.model_name.trim(),text:r.text};
+    const text=englishReport(r.text);
+    check(text&&!hasHan(r.model_name),400,'Provide the original English report text and a model name in English.');
+    return {letter:r.letter,model_name:r.model_name.trim(),text};
   }).sort((a,b)=>a.letter.localeCompare(b.letter));
   const models = new Set(sorted.map(r=>r.model_name.toLowerCase()));
   check(sorted.every((r,i)=>r.letter===letters[i]) && models.size===4,400,'Each letter and model must occur once per case.');
@@ -56,8 +61,8 @@ function normalize(data,drive) {
   const linkedFiles = new Set();
   let modelSet;
   const cases = data.cases.map(c=>{
-    check(c && typeof c.case_id==='string' && aliasPattern.test(c.case_id) && validString(c.case_name,120) && !ids.has(c.case_id),
-      400,'Cases need distinct CaseNN aliases and a display name.');
+    check(c && typeof c.case_id==='string' && aliasPattern.test(c.case_id) && validString(c.case_name,120) && !hasHan(c.case_name) && !ids.has(c.case_id),
+      400,'Cases need distinct CaseNN aliases and a display name in English.');
     check(Number.isSafeInteger(c.size) && c.size>2 && c.size < 2*1024**3 && typeof c.sha256==='string' && /^[a-f0-9]{64}$/.test(c.sha256),
       400,'Invalid NIfTI size or SHA-256.');
     const reports=validateReports(Array.isArray(c.reports) ? c.reports.map(r=>({...r,model_name:displayNames.get(r?.model_name)??r?.model_name})) : c.reports);
@@ -106,7 +111,12 @@ async function createBatch(db,manifest) {
     ]);
   }
   const row=existing || await dbrow(db,'SELECT * FROM web_batches WHERE prefix=?',manifest.prefix);
-  check(row?.manifest===json,409,'This prefix already has a different packet. Use the original packet to resume, or choose a new prefix.');
+  if (row?.manifest!==json) {
+    // Pending uploads from the bilingual release carry the translation in their saved manifest.
+    const previous=row && JSON.parse(row.manifest);
+    for (const c of previous?.cases??[]) for (const r of c.reports) r.text=englishReport(r.text);
+    check(JSON.stringify(previous)===json,409,'This prefix already has a different packet. Use the original packet to resume, or choose a new prefix.');
+  }
   return row;
 }
 
@@ -288,32 +298,36 @@ async function publish(db,batch,users) {
 async function editor(db,id) {
   const rows=await all(db,`SELECT c.case_id,c.case_name,s.letter,r.model_name,r.report_text AS text,
     COALESCE(v.revision,'initial') AS revision,
-    EXISTS(SELECT 1 FROM assignments a WHERE a.case_id=c.case_id AND a.rating IS NOT NULL) AS locked
+    (EXISTS(SELECT 1 FROM assignments a WHERE a.case_id=c.case_id AND a.rating IS NOT NULL)
+      OR EXISTS(SELECT 1 FROM previously_rated_cases p WHERE p.case_id=c.case_id)) AS locked
     FROM private_cases c JOIN shared_case_letters s USING(case_id) JOIN private_reports r USING(case_id,model_name)
     LEFT JOIN web_case_versions v USING(case_id) WHERE c.case_id=? ORDER BY s.letter`,id);
   check(rows.length===4,404,'No shared study reports found for this case.');
   const {case_id,case_name,revision,locked}=rows[0];
-  return {case_id,case_name,revision,locked:!!locked,reports:rows.map(({letter,model_name,text})=>({letter,model_name,text}))};
+  return {case_id,case_name:displayCaseName(case_name,case_id),revision,locked:!!locked,
+    reports:rows.map(({letter,model_name,text})=>({letter,model_name,text:englishReport(text)}))};
 }
 async function saveEdit(db,id,data) {
   const current=await editor(db,id);
   check(!current.locked,409,'Ratings have already been submitted for this case.');
   check(data.revision===current.revision,409,'The report set changed. Reload before editing.');
-  check(validString(data.case_name,120),400,'Enter a valid case display name.');
+  check(validString(data.case_name,120)&&!hasHan(data.case_name),400,'Enter a case display name in English.');
   const name=data.case_name.trim();
   const reports=validateReports(data.reports);
   check(reports.every((r,i)=>r.model_name===current.reports[i].model_name && r.letter===current.reports[i].letter),
     400,'Model names and the frozen letter mapping must remain the same.');
-  if (name===current.case_name && reports.every((r,i)=>r.text===current.reports[i].text)) return current;
+  const edited=reports.filter((r,i)=>r.text!==current.reports[i].text);
+  if (name===current.case_name && !edited.length) return current;
   const rev=crypto.randomUUID();
   const version=" AND EXISTS(SELECT 1 FROM web_case_versions WHERE case_id=? AND revision=?)";
   const changed=await db.batch([
     db.prepare(`INSERT INTO web_case_versions(case_id,revision) SELECT ?,?
       WHERE NOT EXISTS(SELECT 1 FROM assignments WHERE case_id=? AND rating IS NOT NULL)
+      AND NOT EXISTS(SELECT 1 FROM previously_rated_cases WHERE case_id=?)
       AND COALESCE((SELECT revision FROM web_case_versions WHERE case_id=?),'initial')=?
-      ON CONFLICT(case_id) DO UPDATE SET revision=excluded.revision`).bind(id,rev,id,id,current.revision),
-    db.prepare('UPDATE private_cases SET case_name=? WHERE case_id=?'+version).bind(name,id,id,rev),
-    ...reports.map(r=>db.prepare('UPDATE private_reports SET report_text=? WHERE case_id=? AND model_name=?'+version).bind(r.text,id,r.model_name,id,rev))
+      ON CONFLICT(case_id) DO UPDATE SET revision=excluded.revision`).bind(id,rev,id,id,id,current.revision),
+    ...(name===current.case_name?[]:[db.prepare('UPDATE private_cases SET case_name=? WHERE case_id=?'+version).bind(name,id,id,rev)]),
+    ...edited.map(r=>db.prepare('UPDATE private_reports SET report_text=? WHERE case_id=? AND model_name=?'+version).bind(r.text,id,r.model_name,id,rev))
   ]);
   check((changed[0]?.meta?.changes ?? changed[0]?.changes)>0,409,'The case changed or a physician submitted ratings. Reload before editing.');
   return editor(db,id);

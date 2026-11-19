@@ -1,4 +1,5 @@
 import {StudyError,driveImage} from './admin-study.mjs';
+import {hasHan} from './english-ui.mjs';
 
 const prefixPattern=/^[A-Za-z0-9][A-Za-z0-9_-]{0,39}$/;
 const uuid4='[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}';
@@ -53,6 +54,7 @@ export async function joinStudy(request,db,now,{jsonBody,digest}) {
   const {name:input,prefix,entry_key:key}=await jsonBody(request,4096);
   checkedPrefix(prefix);
   const name=typeof input==='string'?input.trim().normalize('NFC'):'';
+  if(hasHan(name)) throw new StudyError(400,'Enter your name in Latin letters.');
   if(!name||name.length>100||/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/u.test(name)) throw new StudyError(400,'Enter your name, up to 100 characters.');
   if(typeof key!=='string'||!entryKey.test(key)) throw new StudyError(400,'Please reopen the reader form.');
   const open=await db.prepare('SELECT 1 AS ok FROM public_studies WHERE prefix=? AND enabled=1').bind(prefix).first();

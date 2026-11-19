@@ -1,5 +1,5 @@
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
-import {downloadPublicDriveCase,verifyPublicDriveCase} from './publicDriveMedia';
+import {downloadPublicDriveCase,verifyPublicDriveCase,type DriveImageProgress} from './publicDriveMedia';
 import {hashBlob} from './fileHash';
 
 const bytes=new Uint8Array([31,139,1,2,3]);
@@ -35,4 +35,23 @@ it('can verify a public file by reading it when Drive omits its checksum',async(
   const expected={size:bytes.length,sha256:await hashBlob(new Blob([bytes]))};
   fetchMock.mockResolvedValueOnce(Response.json({id,size:'5'})).mockResolvedValueOnce(new Response(bytes));
   await verifyPublicDriveCase(link,expected,signal);
+});
+it('reports streamed bytes against the case size without Content-Length, then verifies the file',async()=>{
+  const expected={size:bytes.length,sha256:await hashBlob(new Blob([bytes]))};
+  const progress:DriveImageProgress[]=[];
+  const response=new Response(new ReadableStream({start(controller){
+    controller.enqueue(bytes.subarray(0,2));
+    controller.enqueue(bytes.subarray(2));
+    controller.close();
+  }}));
+  fetchMock.mockResolvedValueOnce(response);
+  vi.spyOn(performance,'now').mockReturnValue(500);
+  try {
+    const output=await downloadPublicDriveCase(link,expected,signal,x=>progress.push(x));
+    expect(output.size).toBe(5);
+    expect(progress).toEqual([
+      {stage:'download',received:0,total:5}, {stage:'download',received:2,total:5},
+      {stage:'download',received:5,total:5}, {stage:'verify',percent:0}, {stage:'verify',percent:100}
+    ]);
+  } finally {vi.restoreAllMocks();}
 });

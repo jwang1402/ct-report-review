@@ -1,13 +1,20 @@
-import {useState} from 'react';
+import {useEffect,useRef,useState} from 'react';
 import {Link} from 'react-router-dom';
 import {Activity,ChevronRight,Download,Eye,EyeOff,FileText,RefreshCw} from 'lucide-react';
 import {useStudyData,exportBlindResults,type StudyResult} from '../services/blindStudy';
 import {decisionLabels,ratings,type Rating} from '../types';
-import {saveFile} from '../utils';
+import {message,saveFile} from '../utils';
+import {api,ResponseError} from '../services/session';
+import {compareCaseIds} from '../services/caseOrder';
+import './AdminResults.css';
 
-export function summarizeReaders(rows:StudyResult[]) {
+type RosterEntry={username:string;display_name:string|null;version:string};
+export function summarizeReaders(rows:StudyResult[],roster:RosterEntry[]=[]) {
   type Progress={id:string;name:string;cases:Map<string,Set<string>>;total:number;rated:number};
   const byReader=new Map<string,Progress>();
+  for (const r of roster) {
+    byReader.set(r.username,{id:r.username,name:r.display_name||r.username,cases:new Map(),total:0,rated:0});
+  }
   for(const r of rows) {
     const reader=byReader.get(r.username)??{id:r.username,name:r.display_name||r.username,cases:new Map<string,Set<string>>(),total:0,rated:0};
     byReader.set(r.username,reader);
@@ -28,15 +35,37 @@ export function summarizeReaders(rows:StudyResult[]) {
   })).sort((a,b)=>a.name.localeCompare(b.name));
 }
 
+function ConfirmDeleteReader({name,busy,error,cancel,confirm}:{name:string;busy:boolean;error:string;cancel:()=>void;confirm:()=>void}){
+  const dialog=useRef<HTMLDialogElement>(null);
+  useEffect(()=>{
+    const element=dialog.current!;
+    element.showModal();
+    return ()=>element.close();
+  },[]);
+  return <dialog ref={dialog} className="form-card remove-dialog reader-delete-dialog" aria-labelledby="delete-reader-title"
+    onCancel={event=>{event.preventDefault();if(!busy)cancel();}}>
+    <h2 id="delete-reader-title">Delete reader?</h2>
+    <p>This permanently deletes <strong>{name}</strong> and all of their ratings and comments across studies, and ends their current sessions.</p>
+    {error&&<p className="error" role="alert">{error}</p>}
+    <div className="actions"><button className="button secondary" autoFocus disabled={busy} onClick={cancel}>Cancel</button>
+      <button className="button delete-reader" disabled={busy} onClick={confirm}>{busy?'Deleting…':'Delete reader'}</button></div>
+  </dialog>;
+}
+
 export default function AdminResults() {
-  const {data,error,refresh}=useStudyData<{results:StudyResult[]}>('/admin/results');
+  const {data,error,refresh}=useStudyData<{results:StudyResult[];readers?:RosterEntry[]}>('/admin/results');
   const [reader,setReader]=useState('');
   const [revealed,setRevealed]=useState(false);
+  const [target,setTarget]=useState<{username:string;name:string;version:string}|null>(null);
+  const [deleting,setDeleting]=useState(false);
+  const [deleteError,setDeleteError]=useState('');
+  const [notice,setNotice]=useState('');
   const rows=data?.results??[];
-  const readers=summarizeReaders(rows);
+  const roster=new Map(data?.readers?.map(r=>[r.username,r]));
+  const readers=summarizeReaders(rows,data?.readers);
   const names=new Map(readers.map(r=>[r.id,r.name]));
   const selected=names.has(reader)?reader:'';
-  const visible=selected?rows.filter(r=>r.username===selected):rows;
+  const visible=rows.filter(r=>!selected||r.username===selected).sort((a,b)=>compareCaseIds(a.case_id,b.case_id));
   const progress=selected?readers.filter(r=>r.id===selected):readers;
   const byCase=new Map<string,StudyResult[]>();
   const histogram=new Map<number,number>();
@@ -51,6 +80,21 @@ export default function AdminResults() {
     const tag=selected?selected.replace(/[^\w-]/g,'-'):'all';
     saveFile(exportBlindResults(records),'reader-results-'+tag+(revealed?'-unblinded':'')+'.csv','text/csv;charset=utf-8');
   }
+  async function deleteReader() {
+    if(!target||deleting)return;
+    setDeleting(true);setDeleteError('');
+    try {
+      await api('/admin/doctors/'+encodeURIComponent(target.username),{
+        method:'DELETE',body:JSON.stringify({version:target.version})
+      });
+      if(selected===target.username)setReader('');
+      setTarget(null);setNotice(target.name+' was deleted.');refresh();
+    } catch (err) {
+      if(err instanceof ResponseError && (err.status===409||err.status===404)){
+        setTarget(null);setNotice(message(err));refresh();
+      }else setDeleteError(message(err));
+    } finally {setDeleting(false);}
+  }
   return <main className="page">
     <div className="page-heading"><div><h1>Review results</h1><p>Findings quality ratings: 1 = Poor, 5 = Excellent.</p></div>
       <div className="actions">
@@ -61,8 +105,10 @@ export default function AdminResults() {
         <button className="button primary" disabled={!visible.length} onClick={exportView}><Download size={15}/> Export CSV</button>
       </div>
     </div>
+    {notice&&<p role="status">{notice}</p>}
+    {target&&<ConfirmDeleteReader name={target.name} busy={deleting} error={deleteError} cancel={()=>setTarget(null)} confirm={()=>void deleteReader()}/>}
     {error?<p className="error" role="alert">{error}</p>:!data?<p role="status">Loading reader results…</p>:
-      !rows.length?<div className="work-card empty"><Activity size={30}/><h2>No reader assignments yet</h2>
+      !readers.length?<div className="work-card empty"><Activity size={30}/><h2>No readers yet</h2>
         <Link className="button secondary" to="/admin/cases">Open Clinical Review <ChevronRight size={15}/></Link></div>:<>
         <div className="reader-filter"><label>Reader<select value={selected} onChange={e=>setReader(e.target.value)}>
           <option value="">All readers</option>
@@ -75,8 +121,12 @@ export default function AdminResults() {
         <section className="work-card results-group"><div className="section-heading"><h2>Reader progress</h2>
           <span className="muted">{progress.length} {progress.length===1?'reader':'readers'}</span></div>
           <div className="table-scroll"><table><thead><tr>
-            <th>Reader</th><th>Completed cases</th><th>Assigned cases</th><th>Mean rating (1–5)</th>
-          </tr></thead><tbody>{progress.map(r=><tr key={r.id}><td>{r.name}</td><td>{r.completed}</td><td>{r.assigned}</td><td>{r.mean}</td></tr>)}</tbody></table></div>
+            <th>Reader</th><th>Completed cases</th><th>Assigned cases</th><th>Mean rating (1–5)</th><th>Actions</th>
+          </tr></thead><tbody>{progress.map(r=><tr key={r.id}><td>{r.name}</td><td>{r.completed}</td><td>{r.assigned}</td><td>{r.mean}</td>
+            <td><button className="button secondary" aria-label={'Delete reader '+r.name} disabled={!roster.has(r.id)} onClick={()=>{
+              const entry=roster.get(r.id);
+              if(entry){setTarget({username:r.id,name:r.name,version:entry.version});setNotice('');setDeleteError('');}
+            }}>Delete</button></td></tr>)}</tbody></table></div>
         </section>
         {Array.from(byCase,([id,entries])=><section className="work-card results-group" key={id}>
           <div className="section-heading"><h2><Link className="review-link" to={'/admin/cases/'+encodeURIComponent(id)}>{id}</Link></h2></div>
@@ -85,7 +135,7 @@ export default function AdminResults() {
           </tr></thead><tbody>{entries.map(r=><tr key={r.username+'/'+r.letter}>
             <td>{names.get(r.username)}</td><td>{r.letter}</td>{revealed&&<td>{r.model_name}</td>}
             <td>{r.rating===null?'Pending':<span className="badge">{decisionLabels[String(r.rating) as Rating]}</span>}</td>
-            <td className="comment-cell">{r.comment||'—'}</td><td>{r.updated_at?new Date(r.updated_at).toLocaleDateString():'—'}</td>
+            <td className="comment-cell">{r.comment||'—'}</td><td>{r.updated_at?new Date(r.updated_at).toLocaleDateString('en-US'):'—'}</td>
           </tr>)}</tbody></table></div>
         </section>)}
       </>}

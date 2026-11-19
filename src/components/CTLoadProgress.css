@@ -1,0 +1,16 @@
+.ct-load-progress {
+  width: min(17rem, 100%);
+  margin: 0.9rem auto;
+  text-align: left;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.ct-load-progress > div { display: flex; justify-content: space-between; gap: 0.75rem; }
+.ct-load-progress progress, .viewer-overlay .ct-load-progress progress {
+  display: block;
+  width: 100%;
+  height: 0.5rem;
+  margin: 0.45rem 0;
+  accent-color: var(--accent, #2866ce);
+}
+.ct-load-progress small { display: block; color: var(--muted, #536b89); }

@@ -33,9 +33,9 @@ export function parseDriveLinksTable(text:string,caseIds:string[]) {
   return links;
 }
 
-export async function verifyCaseVolume(file:Blob,imaging:{size:number;sha256?:string},signal?:AbortSignal) {
+export async function verifyCaseVolume(file:Blob,imaging:{size:number;sha256?:string},signal?:AbortSignal,onProgress?:(percent:number)=>void) {
   if (!imaging.sha256) throw new Error('The case checksum is missing. Contact the coordinator.');
-  if (file.size!==imaging.size || await hashBlob(file,signal)!==imaging.sha256) {
+  if (file.size!==imaging.size || await hashBlob(file,signal,onProgress)!==imaging.sha256) {
     throw new Error('This file does not match this case. Select the original .nii.gz from the case link.');
   }
 }

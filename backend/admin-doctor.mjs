@@ -15,7 +15,32 @@ async function publishedStudies(db) {
 }
 
 // The Worker checks the administrator role before dispatching any of these routes.
-export async function manageReaders(path, request, db, {jsonBody, passwordHash, HttpError}) {
+const readerVersion=(digest,username,salt)=>digest(JSON.stringify(['reader-version',username,salt]));
+
+export async function readerRoster(db,digest,displayReaderName) {
+  const {results}=await db.prepare("SELECT a.username,a.password_salt,r.display_name FROM accounts a "+
+    "LEFT JOIN public_readers r USING(username) WHERE a.role='doctor' ORDER BY a.username").all();
+  return Promise.all(results.map(async r=>({
+    username:r.username,display_name:displayReaderName(r.display_name,r.username),
+    version:await readerVersion(digest,r.username,r.password_salt)
+  })));
+}
+
+export async function manageReaders(path, request, db, {jsonBody, passwordHash, digest, HttpError}) {
+  if (request.method==='DELETE' && path.startsWith('/admin/doctors/')) {
+    const target=path.slice('/admin/doctors/'.length).replace(/%3a/i,':');
+    if (!usernamePattern.test(target) && !/^reader:[0-9a-f]{32}$/.test(target)) throw new HttpError(400,'Invalid reader ID.');
+    const {version}=await jsonBody(request,1024);
+    if (typeof version!=='string'||!/^[0-9a-f]{64}$/.test(version)) throw new HttpError(400,'Choose a reader from the current results.');
+    const reader=await db.prepare("SELECT password_salt FROM accounts WHERE username=? AND role='doctor'").bind(target).first();
+    if (!reader) throw new HttpError(404,'Reader no longer exists.');
+    if (await readerVersion(digest,target,reader.password_salt)!==version) throw new HttpError(409,'The reader account changed. Refresh the results.');
+    // Foreign-key cascades remove only this reader's sessions, assignments, scores and guest registration.
+    const removed=await db.prepare("DELETE FROM accounts WHERE username=? AND role='doctor' AND password_salt=? RETURNING username")
+      .bind(target,reader.password_salt).first();
+    if (!removed) throw new HttpError(409,'The reader account changed. Refresh the results.');
+    return {deleted:removed.username};
+  }
   if (path === '/admin/doctors' && request.method === 'POST') {
     const {username, password} = await jsonBody(request);
     if (typeof username !== 'string' || !usernamePattern.test(username) ||

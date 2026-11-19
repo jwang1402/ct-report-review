@@ -1,10 +1,10 @@
 # CT Report Review
 
-Doctors open `#/doctor`, enter their name and rate four anonymous reports per CT. For studies opened to the public, the viewer loads the approved images without a Google sign-in. Each reader's current tab holds the session used to save and resume ratings. Coordinators sign in to `#/admin` to publish studies and see ratings, comments and model names.
+Doctors open `#/doctor`, enter their name and select a case from the scrollable, numerically ordered **Case workspace**. The viewer shows loading progress for the CT. Each scan has four anonymous reports (A–D), displayed and downloaded in the original English. For a public study, the reader can open the images without a Google sign-in. Each reader's current tab holds the session used to save and resume ratings.
 
 ## Prepare the study
 
-Follow [四模型盲审部署与病例导入](docs/BLIND_STUDY.md) to set up D1 and create the first administrator. For cases approved for public release, create a dedicated Google Drive folder with **Anyone with the link · Viewer**. On **Upload Case**, verify the study archives, confirm public sharing and publish. Readers see the same cases and A–D reports. Administrators can edit a case before its first rating. **Results** shows completed cases and individual ratings by reader. **Show model names** reveals the mapping for each case.
+Follow the [deployment and import guide](docs/BLIND_STUDY.md) to set up D1 and create the first administrator. Sign in at `#/admin` and open **Upload Case** to verify the study archives. For cases approved for public release, select a dedicated Google Drive folder with **Anyone with the link · Viewer**, confirm public sharing and publish. Readers see the same cases and A–D reports. Administrators can edit a case before its first rating. Under **Results**, review completed cases and individual ratings, reveal the model names for each case or remove a reader and their ratings.
 
 ## Application
 
