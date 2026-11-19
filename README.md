@@ -10,7 +10,7 @@ Follow the [deployment and import guide](docs/BLIND_STUDY.md) to set up D1 and c
 
 GitHub Pages serves the React application. The Cloudflare Worker stores assignments, file references and ratings in D1. Drive controls access to the image files. The doctor workspace provides the assigned file link, anonymous reports and that doctor's own ratings. Coordinators can unblind the results. Sites with an existing private R2 binding can also serve scans from that bucket.
 
-The viewer downloads large public CTs in 4 MiB ranges and verifies the assembled file against its study checksum. If a browser cannot reach Drive, it resumes through the review Worker. Set the Worker's `DRIVE_MEDIA_KEY` secret to a Drive API key that permits server-side reads of public files. The Worker uses the reader's case assignment and the study's public-access setting to authorize each request.
+The viewer requests each public CT directly from Drive in one download. If the connection stalls or breaks, the viewer keeps the bytes it has received and requests the remainder in ranges through the review Worker. It verifies the complete file against the study checksum before displaying the scan. Set the Worker's `DRIVE_MEDIA_KEY` secret to a Drive API key that permits server-side reads of public files. The Worker uses the reader's case assignment and the study's public-access setting to authorize each request.
 
 ## Develop and verify
 

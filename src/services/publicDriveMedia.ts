@@ -38,6 +38,7 @@ async function media(link:string,signal:AbortSignal,range?:string){
 }
 
 const RANGE_BYTES=4*1024*1024;
+const DIRECT_IDLE_MS=8000;
 const retryDelays=[1000,3000,7000,15000,25000];
 
 async function reconnectAfter(delay:number,signal:AbortSignal){
@@ -70,39 +71,47 @@ async function studyMedia(caseId:string,signal:AbortSignal,range?:string) {
 
 type PartSource=(signal:AbortSignal,range?:string)=>Promise<Response>;
 
-async function readPart(source:PartSource,total:number,start:number,span:number,signal:AbortSignal,update:(bytes:number)=>void) {
-  const end=Math.min(start+span,total)-1;
-  const range=total>span||start>0?'bytes='+start+'-'+end:undefined;
+class InvalidMedia extends Error {}
+
+async function readTransfer(source:PartSource,total:number,start:number,end:number,idleMs:number,signal:AbortSignal,
+  append:(part:Blob)=>void,update:(bytes:number)=>void) {
+  const range=start>0||end<total-1?'bytes='+start+'-'+end:undefined;
   const controller=new AbortController();
   const abort=()=>controller.abort();
   signal.throwIfAborted();
   signal.addEventListener('abort',abort,{once:true});
-  let timer=setTimeout(abort,45000);
+  let timer=setTimeout(abort,idleMs);
   try {
     const response=await source(controller.signal,range);
-    // Drive may ignore Range and supply one complete file.
-    const offset=response.status===200?0:start;
+    if(response.status===200 && start!==0) {
+      abort();throw new InvalidMedia('The server could not resume the CT at the requested position.');
+    }
     const length=response.status===200?total:end-start+1;
     const contentRange=response.headers.get('Content-Range');
-    if(response.status===206 && contentRange && contentRange!=='bytes '+start+'-'+end+'/'+total) {
+    if(response.status!==200 && (response.status!==206 || !range || (contentRange && contentRange!=='bytes '+start+'-'+end+'/'+total))) {
       abort();throw new TransferError('Drive returned an unexpected part of the CT. Retry loading the file.',true);
     }
-    const pieces:ArrayBuffer[]=[];
-    let count=0;
+    let pieces:BlobPart[]=[], pending=0, count=0;
+    function flush(){
+      if(!pending)return;
+      append(new Blob(pieces));pieces=[];pending=0;
+    }
     const reader=response.body!.getReader();
     try {
       for(;;){
         const chunk=await reader.read();
         if(chunk.done)break;
-        clearTimeout(timer);timer=setTimeout(abort,45000);
+        if(!chunk.value.byteLength)continue;
+        clearTimeout(timer);timer=setTimeout(abort,idleMs);
         count+=chunk.value.byteLength;
-        if(count>length){abort();throw new TransferError('The downloaded CT exceeds its verified size.',false);}
-        pieces.push(new Uint8Array(chunk.value).buffer);
-        update(offset+count);
+        if(count>length){abort();throw new InvalidMedia('The downloaded CT exceeds its verified size.');}
+        pieces.push(chunk.value);
+        pending+=chunk.value.byteLength;
+        if(pending>=RANGE_BYTES)flush();
+        update(start+count);
       }
-    } finally {reader.releaseLock();}
+    } finally {flush();reader.releaseLock();}
     if(count!==length)throw new TransferError('The CT download stopped early. Retry loading the file.',true);
-    return {offset,blob:new Blob(pieces)};
   } finally {
     clearTimeout(timer);
     signal.removeEventListener('abort',abort);
@@ -112,9 +121,9 @@ async function readPart(source:PartSource,total:number,start:number,span:number,
 export async function downloadPublicDriveCase(link:string,expected:ExpectedImage,signal:AbortSignal,onProgress?:(progress:DriveImageProgress)=>void,caseId?:string) {
   const total=expected.size;
   const parts:Blob[]=[];
-  let source:PartSource=(partSignal,range)=>media(link,partSignal,range);
-  let usingReviewService=false;
+  const direct:PartSource=(partSignal,range)=>media(link,partSignal,range);
   let saved=0,lastUpdate=0;
+  function append(part:Blob){parts.push(part);saved+=part.size;}
   onProgress?.({stage:'download',received:0,total});
   function update(received:number){
     const now=performance.now();
@@ -122,22 +131,26 @@ export async function downloadPublicDriveCase(link:string,expected:ExpectedImage
       onProgress?.({stage:'download',received,total});lastUpdate=now;
     }
   }
-  // Keep the working range size on a slow connection for the rest of this scan.
+  // A healthy connection delivers the entire scan in a single GET.
+  try{
+    await readTransfer(direct,total,0,total-1,DIRECT_IDLE_MS,signal,append,update);
+  }catch(e){
+    signal.throwIfAborted();
+    if(e instanceof InvalidMedia||(!caseId&&e instanceof TransferError&&!e.retryable))throw e;
+    if(saved<total)onProgress?.({stage:'download',received:saved,total,reconnecting:true});
+  }
+  const resume:PartSource=caseId?(partSignal,range)=>studyMedia(caseId,partSignal,range):direct;
   let span=RANGE_BYTES;
   while(saved<total){
     for(let retry=0;;){
       try{
-        const {offset,blob}=await readPart(source,total,saved,span,signal,update);
-        if(offset===0)parts.length=0;
-        parts.push(blob);saved=offset+blob.size;break;
+        const end=Math.min(saved+span,total)-1;
+        await readTransfer(resume,total,saved,end,45000,signal,append,update);
+        break;
       }catch(e){
         signal.throwIfAborted();
-        if(caseId&&!usingReviewService){
-          usingReviewService=true;
-          source=(partSignal,range)=>studyMedia(caseId,partSignal,range);
-          continue;
-        }
-        if(e instanceof TransferError&&!e.retryable)throw e;
+        if(e instanceof InvalidMedia||(e instanceof TransferError&&!e.retryable))throw e;
+        if(saved===total)break;
         if(retry>=retryDelays.length)throw e instanceof TransferError?e:new Error('The connection to Google Drive was interrupted. Retry loading the CT or open the downloaded file.');
         onProgress?.({stage:'download',received:saved,total,reconnecting:true});
         span=Math.max(512*1024,span/2);

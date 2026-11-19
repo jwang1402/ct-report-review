@@ -7,7 +7,8 @@ import {ViewerBoundary} from './ViewerBoundary';
 import {message,sizeLabel} from '../utils';
 import {ScanLine} from 'lucide-react';
 
-const Viewer=lazy(()=>import('./Viewer'));
+const loadViewer=()=>import('./Viewer');
+const Viewer=lazy(loadViewer);
 
 export default function DriveCaseViewer({study,publicReader=false}:{study:StudyDetail;publicReader?:boolean}) {
   const [file,setFile]=useState<File|null>(null);
@@ -27,6 +28,8 @@ export default function DriveCaseViewer({study,publicReader=false}:{study:StudyD
       .then(value=>{if(!controller.signal.aborted)setFile(value);})
       .catch(e=>{if(!controller.signal.aborted)setError(message(e));})
       .finally(()=>{if(!controller.signal.aborted)setProgress(null);});
+    // Fetch the viewer code while the selected CT is in transit.
+    void loadViewer().catch(()=>{});
     return ()=>controller.abort();
   },[publicReader,retry,url,size,sha256,caseId]);
   async function openFile(selected:File) {

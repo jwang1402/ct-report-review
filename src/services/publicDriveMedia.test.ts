@@ -57,23 +57,81 @@ it('reports streamed bytes against the case size without Content-Length, then ve
   } finally {vi.restoreAllMocks();}
 });
 
-it('keeps completed ranges when a different origin must supply the remainder',async()=>{
+it('downloads a healthy large CT directly with a single GET and no relay request',async()=>{
+  const scan=new Uint8Array(9*1024*1024+21);
+  scan.set(bytes);
+  const expected={size:scan.length,sha256:await hashBlob(new Blob([scan]))};
+  fetchMock.mockResolvedValueOnce(new Response(scan));
+  const file=await downloadPublicDriveCase(link,expected,signal,undefined,'Study-Case01');
+  expect(file.size).toBe(scan.length);expect(fetchMock).toHaveBeenCalledTimes(1);
+  const [url,init]=fetchMock.mock.calls[0];
+  expect(String(url)).toContain('https://www.googleapis.com/drive/v3/files/');
+  expect(new Headers(init?.headers).has('Range')).toBe(false);
+  expect(new Headers(init?.headers).has('Authorization')).toBe(false);
+});
+
+it('resumes a dropped direct stream at the exact received byte, including a partial range',async()=>{
   const stride=4*1024*1024;
-  const scan=new Uint8Array(stride+3);
+  const scan=new Uint8Array(stride+5),offset=stride+2;
   scan.set(bytes);scan.set([3,9,7],stride);
   const expected={size:scan.length,sha256:await hashBlob(new Blob([scan]))};
-  const partial=(first:number,last:number)=>new Response(scan.subarray(first,last+1),{status:206,
-    headers:{'Content-Range':'bytes '+first+'-'+last+'/'+scan.length}});
-  fetchMock.mockResolvedValueOnce(partial(0,stride-1)).mockRejectedValueOnce(new TypeError('Failed to fetch'))
-    .mockResolvedValueOnce(partial(stride,scan.length-1));
+  let sent=0;
+  fetchMock.mockResolvedValueOnce(new Response(new ReadableStream({pull(controller){
+    if(sent===0)controller.enqueue(scan.subarray(0,stride));
+    else if(sent===1)controller.enqueue(scan.subarray(stride,offset));
+    else controller.error(new TypeError('Stream interrupted'));
+    sent++;
+  }}))).mockResolvedValueOnce(new Response(scan.subarray(offset),{status:206,
+    headers:{'Content-Range':'bytes '+offset+'-'+(scan.length-1)+'/'+scan.length}}));
   const output=await downloadPublicDriveCase(link,expected,signal,undefined,'Study-Case01');
   expect(output.size).toBe(scan.length);
   expect(fetchMock.mock.calls.map(([,init])=>new Headers(init?.headers).get('Range'))).toEqual(
-    ['bytes=0-4194303','bytes=4194304-4194306','bytes=4194304-4194306']);
+    [null,'bytes=4194306-4194308']);
   const sources=fetchMock.mock.calls;
   expect(new Headers(sources[0][1]?.headers).has('Authorization')).toBe(false);
-  expect(sources[2][0]).toBe('https://review.example/blind/cases/Study-Case01/image?part=4194304-4194306');
-  expect(new Headers(sources[2][1]?.headers).get('Authorization')).toBe('Bearer fixture-session');
+  expect(sources[1][0]).toBe('https://review.example/blind/cases/Study-Case01/image?part=4194306-4194308');
+  expect(new Headers(sources[1][1]?.headers).get('Authorization')).toBe('Bearer fixture-session');
+});
+
+it('switches to the authorized service if Drive stops sending bytes, without a competing transfer',async()=>{
+  const expected={size:bytes.length,sha256:await hashBlob(new Blob([bytes]))};
+  fetchMock.mockImplementationOnce(async(_url,init)=>new Response(new ReadableStream({start(controller){
+    controller.enqueue(bytes.subarray(0,2));
+    init?.signal?.addEventListener('abort',()=>controller.error(new DOMException('Aborted','AbortError')),{once:true});
+  }}))).mockResolvedValueOnce(new Response(bytes.subarray(2),{status:206,headers:{'Content-Range':'bytes 2-4/5'}}));
+  vi.useFakeTimers();
+  try {
+    const pending=downloadPublicDriveCase(link,expected,signal,undefined,'Study-Case01');
+    await vi.advanceTimersByTimeAsync(7900);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(101);
+    const output=await pending;
+    expect(output.size).toBe(5);
+    expect(fetchMock.mock.calls[0][1]?.signal?.aborted).toBe(true);
+    expect(new Headers(fetchMock.mock.calls[1][1]?.headers).get('Range')).toBe('bytes=2-4');
+  } finally {vi.useRealTimers();}
+});
+
+it('falls back when Drive never starts responding and stops altogether when the reader leaves',async()=>{
+  const expected={size:bytes.length,sha256:await hashBlob(new Blob([bytes]))};
+  const noResponse:typeof fetch=(_url,init)=>new Promise((_resolve,reject)=>{
+    init?.signal?.addEventListener('abort',()=>reject(init.signal?.reason),{once:true});
+  });
+  fetchMock.mockImplementationOnce(noResponse).mockResolvedValueOnce(new Response(bytes));
+  vi.useFakeTimers();
+  try {
+    const waiting=downloadPublicDriveCase(link,expected,signal,undefined,'Study-Case01');
+    await vi.advanceTimersByTimeAsync(8001);
+    expect((await waiting).size).toBe(5);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    fetchMock.mockImplementationOnce(noResponse);
+    const leave=new AbortController();
+    const abandoned=downloadPublicDriveCase(link,expected,leave.signal,undefined,'Study-Case02');
+    leave.abort();
+    await expect(abandoned).rejects.toMatchObject({name:'AbortError'});
+    await vi.advanceTimersByTimeAsync(9000);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  } finally {vi.useRealTimers();}
 });
 
 it('does not accept a different file from the review service or reuse a restricted session',async()=>{

@@ -18,6 +18,11 @@ const Viewer=lazy(()=>import('./Viewer'));
 type Role=Identity['role'];
 const caseLink=(role:Role,id:string)=>'/'+role+'/cases/'+encodeURIComponent(id);
 
+function ReaderCaseLabel({id}:{id:string}) {
+  const alias=id.match(/(?:^|-)(Case\d+)$/)?.[1]??id;
+  return <span><strong>{alias}</strong>{alias!==id&&<small>{id}</small>}</span>;
+}
+
 export function CaseTable({role,cases,compact=false,scrollable=false}:{role:Role;cases:StudyListItem[];compact?:boolean;scrollable?:boolean}) {
   if(!cases.length)return <div className="empty"><div className="empty-icon"><ScanLine size={32}/></div><h2>No cases available</h2>
     {role==='admin'?<Link className="button primary" to="/admin/upload"><Plus size={16}/>Upload Case</Link>:<p>Your study cases will appear here.</p>}</div>;
@@ -25,8 +30,8 @@ export function CaseTable({role,cases,compact=false,scrollable=false}:{role:Role
   return <div className={'table-scroll'+(scrollable?' case-workspace-scroll':'')} role={scrollable?'region':undefined}
     aria-label={scrollable?'Case list':undefined} tabIndex={scrollable?0:undefined}><table><thead><tr><th>Case / study</th><th>Imaging</th><th>Reports</th><th>Review status</th><th/></tr></thead>
     <tbody>{(compact?ordered.slice(0,5):ordered).map(c=><tr key={c.case_id}>
-      <td><Link className="case-title" to={caseLink(role,c.case_id)}><span className="study-icon"><ScanLine size={19}/></span><span>
-        <strong>{c.case_name}</strong>{c.case_id!==c.case_name&&<small>{c.case_id}</small>}</span></Link></td>
+      <td><Link className="case-title" to={caseLink(role,c.case_id)}><span className="study-icon"><ScanLine size={19}/></span>
+        {role==='doctor'?<ReaderCaseLabel id={c.case_id}/>:<span><strong>{c.case_name}</strong>{c.case_id!==c.case_name&&<small>{c.case_id}</small>}</span>}</Link></td>
       <td><span className="format-badge">NIfTI</span></td><td>4 reports</td>
       <td>{role==='doctor'?<div className="review-meter"><span>{c.scored?4:0} / 4 reviewed</span><progress value={c.scored?4:0} max={4}/></div>
         :<span className={'badge'+(c.scored?' good':'')}>{c.scored?'All submitted':'Pending'}</span>}</td>
@@ -158,8 +163,8 @@ export function BlindCase({role,publicReader=false}:{role:Role;publicReader?:boo
         <h2>Cases <span>{cases.length}</span></h2><PanelLeftClose size={15}/></div>
         {library.error&&<button className="button secondary" onClick={library.refresh}>Reload case list</button>}
         {cases.map(c=><Link key={c.case_id} to={caseLink(role,c.case_id)} className={'case-item '+(c.case_id===caseId?'active':'')} aria-current={c.case_id===caseId?'page':undefined}>
-          <div><span className="mini-study"><ScanLine size={22}/></span><span><strong>{c.case_id}</strong><small>NIfTI</small></span><ChevronRight size={14}/></div>
-          {c.case_name!==c.case_id&&<p>{c.case_name}</p>}<small>{c.scored?'Submitted':'Pending'}</small></Link>)}
+          <div><span className="mini-study"><ScanLine size={22}/></span>{role==='doctor'?<ReaderCaseLabel id={c.case_id}/>:<span><strong>{c.case_id}</strong><small>NIfTI</small></span>}<ChevronRight size={14}/></div>
+          {role==='admin'&&c.case_name!==c.case_id&&<p>{c.case_name}</p>}<small>{c.scored?'Submitted':'Pending'}</small></Link>)}
       </aside></ResizablePanel><ResizableHandle/>
       <ResizablePanel defaultSize={55} minSize={35}>
         {data.imaging.drive_url?<DriveCaseViewer key={data.case_id} study={data} publicReader={publicReader||data.public_ct}/>:<ViewerBoundary key={data.case_id}>

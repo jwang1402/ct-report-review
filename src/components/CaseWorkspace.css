@@ -10,7 +10,8 @@
 .clinical-case .model-key-control button { background: transparent; border: 0; }
 .clinical-case .report-title h3 { overflow-wrap: anywhere; }
 .clinical-case .decision-panel .reviewer-group > p { color: var(--muted); margin: 10px 0; }
-.clinical-case .case-item strong { overflow-wrap: anywhere; }
+.clinical-case .case-item strong, .clinical-case .case-item small { overflow-wrap: anywhere; }
+.clinical-case .case-item > div > span:nth-child(2) { min-width: 0; }
 @media (max-width: 800px) {
   .review-page.clinical-case { min-width: 0; height: auto; min-height: 0; }
   .clinical-case > .review-layout { display: block !important; overflow: visible !important; }
@@ -22,7 +23,7 @@
   .clinical-case .review-topbar { min-width: 0; flex-wrap: wrap; height: auto; min-height: 46px; }
 }
 .table-scroll.case-workspace-scroll {
-  max-height: clamp(22rem, 74vh, 62rem);
+  max-height: min(90vh, 80rem);
   overflow: auto;
   scrollbar-gutter: stable;
 }
@@ -31,10 +32,9 @@
 .home-page:has(.case-workspace-scroll) .summary-strip { margin-bottom: 16px; }
 .home-page:has(.case-workspace-scroll) .summary-strip > div { padding-block: 10px; }
 .home-page:has(.case-workspace-scroll) .work-card > .section-heading { padding-block: 9px; }
-.case-workspace-scroll td { padding: 5px clamp(8px, 1.5vw, 24px); }
+.case-workspace-scroll td { padding: clamp(8px, 1.45vh, 16px) clamp(8px, 1.5vw, 24px); }
 .case-workspace-scroll th { padding-inline: clamp(8px, 1.5vw, 24px); }
-.case-workspace-scroll .case-title small { margin-top: 2px; }
-.case-workspace-scroll .study-icon { width: 31px; height: 31px; }
+.case-workspace-scroll .case-title small { margin-top: 5px; }
 .case-workspace-scroll .review-link { min-height: 33px; }
 .case-workspace-scroll thead th {
   position: sticky;
