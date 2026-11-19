@@ -87,7 +87,7 @@ it('does not accept a different file from the review service or reuse a restrict
 
 it('recovers from a temporary transfer failure with a smaller range at the same offset',async()=>{
   const stride=4*1024*1024;
-  const scan=new Uint8Array(stride*2);
+  const scan=new Uint8Array(stride*2+7);
   scan.set(bytes);scan.set(bytes,stride);
   const expected={size:scan.length,sha256:await hashBlob(new Blob([scan]))};
   let interrupted=false;
@@ -105,6 +105,6 @@ it('recovers from a temporary transfer failure with a smaller range at the same 
   const progress:DriveImageProgress[]=[];
   const file=await downloadPublicDriveCase(link,expected,signal,x=>progress.push(x),'Study-Case01');
   expect(file.size).toBe(scan.length);
-  expect(ranges).toEqual(['bytes=0-4194303','bytes=4194304-8388607','bytes=4194304-6291455','bytes=6291456-8388607']);
+  expect(ranges).toEqual(['bytes=0-4194303','bytes=4194304-8388607','bytes=4194304-6291455','bytes=6291456-8388607','bytes=8388608-8388614']);
   expect(progress).toContainEqual({stage:'download',received:stride,total:scan.length,reconnecting:true});
 });

@@ -122,8 +122,9 @@ export async function downloadPublicDriveCase(link:string,expected:ExpectedImage
       onProgress?.({stage:'download',received,total});lastUpdate=now;
     }
   }
+  // Keep the working range size on a slow connection for the rest of this scan.
+  let span=RANGE_BYTES;
   while(saved<total){
-    let span=RANGE_BYTES;
     for(let retry=0;;){
       try{
         const {offset,blob}=await readPart(source,total,saved,span,signal,update);
