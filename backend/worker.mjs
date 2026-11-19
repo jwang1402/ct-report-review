@@ -3,7 +3,8 @@ import {englishReport} from './english-report.mjs';
 import {manageReaders,readerRoster} from './admin-doctor.mjs';
 import {hasHan,displayCaseName,displayReaderName,displayComment} from './english-ui.mjs';
 import {guestSession,joinStudy,listReaderStudies,publicStudyImages,setReaderAccess} from './public-readers.mjs';
-const origins = new Set(['https://jwang1402.github.io', 'http://127.0.0.1:5173', 'http://localhost:5173']);
+const siteOrigin='https://jwang1402.github.io';
+const origins = new Set([siteOrigin, 'http://127.0.0.1:5173', 'http://localhost:5173']);
 const encoder = new TextEncoder();
 const casePath = /^\/blind\/cases\/([A-Za-z0-9_-]{1,100})(?:\/(ratings|image))?$/;
 const letters = ['A', 'B', 'C', 'D'];
@@ -141,12 +142,12 @@ async function caseDetails(db, user, row) {
       .bind(row.case_id);
   const {results} = await query.all();
   const drive=driveImage(row.image_key);
-  const access=!doctor&&drive ? await db.prepare('SELECT enabled FROM public_studies WHERE prefix=?').bind(row.image_key.split('/')[1]).first() : null;
+  const publicCT=drive && await publicStudyEnabled(db,row);
   return {
     case_id: row.case_id, case_name: doctor ? row.case_id : displayCaseName(row.case_name,row.case_id),
     imaging: {type: 'NIFTI', filename: row.case_id + (row.image_filename.endsWith('.gz') ? '.nii.gz' : '.nii'), size: row.image_size,
       ...drive},
-    ...(access?.enabled && {public_ct:true}),
+    ...(publicCT && {public_ct:true}),
     reports: doctor ? results.map(({letter,text,rating,comment})=>({
       letter,text:englishReport(text),rating,comment:hasHan(comment)?null:comment
     })) : results.map(({letter,model_name,text})=>({
@@ -203,24 +204,94 @@ function byteRange(header, size) {
   return {offset: first, length: last - first + 1};
 }
 
-async function imageResponse(request, bucket, row, headers) {
-  if (driveImage(row.image_key)) throw new HttpError(409,'Open the authorized Google Drive link to download this image.');
-  if (!bucket) throw new HttpError(503, 'Private image storage is unavailable.');
+async function publicStudyEnabled(db,row) {
+  const result=await db.prepare('SELECT enabled FROM public_studies WHERE prefix=?').bind(row.image_key.split('/')[1]).first();
+  return Boolean(result?.enabled);
+}
+
+const maxDriveRange=4*1024*1024;
+
+async function driveMediaBytes(request,drive,key,range,totalSize) {
+  // The file ID and optional resource key come solely from the stored, validated sharing link.
+  const link=new URL(drive.drive_url);
+  const fileId=link.pathname.split('/')[3];
+  const resourceKey=link.searchParams.get('resourcekey');
+  const url=new URL('https://www.googleapis.com/drive/v3/files/'+fileId);
+  url.search=new URLSearchParams({alt:'media',supportsAllDrives:'true'}).toString();
+  const headers=new Headers({'X-Goog-Api-Key':key,'Accept-Encoding':'identity'});
+  const origin=request.headers.get('Origin');
+  const referer=request.headers.get('Referer');
+  if(origin===siteOrigin && referer && URL.canParse(referer)){
+    const ref=new URL(referer);
+    if(ref.origin===origin && !ref.username && !ref.password){
+      headers.set('Origin',origin);
+      headers.set('Referer',ref.origin+'/');
+    }
+  }
+  if(resourceKey) headers.set('X-Goog-Drive-Resource-Keys',fileId+'/'+resourceKey);
+  const interval=range && range.offset+'-'+(range.offset+range.length-1);
+  if(range) headers.set('Range','bytes='+interval);
+  const expectedLength=range?.length??totalSize;
+  const upstream=await fetch(url,{headers,method:'GET',cache:'no-store',redirect:'manual',signal:request.signal});
+  if(upstream.status===403){
+    await upstream.body?.cancel();
+    throw new HttpError(403,'Google Drive denied access to this CT download.');
+  }
+  const contentLength=upstream.headers.get('Content-Length');
+  const encoding=upstream.headers.get('Content-Encoding');
+  const contentRange=upstream.headers.get('Content-Range');
+  const invalid=new HttpError(502,'Google Drive did not return the requested CT data. Please retry.');
+  if(upstream.status!==(range?206:200)||!upstream.body||contentRange!==(range?'bytes '+interval+'/'+totalSize:null)
+      ||(contentLength!==null&&contentLength!==String(expectedLength))||(encoding&&encoding!=='identity')
+      ||/text\/|application\/json/i.test(upstream.headers.get('Content-Type')||'')){
+    await upstream.body?.cancel();
+    throw invalid;
+  }
+  // Stream into one bounded range and verify its actual length before returning a successful response.
+  const bytes=new Uint8Array(expectedLength);
+  const reader=upstream.body.getReader();
+  let offset=0;
+  try {
+    for(;;){
+      const {value,done}=await reader.read();
+      if(done) break;
+      if(offset+value.byteLength>expectedLength){await reader.cancel(); throw invalid;}
+      bytes.set(value,offset); offset+=value.byteLength;
+    }
+  } finally {reader.releaseLock();}
+  if(offset!==expectedLength) throw invalid;
+  return bytes;
+}
+
+async function imageResponse(request, env, row, headers) {
+  const drive=driveImage(row.image_key);
+  if(drive){
+    if(!await publicStudyEnabled(env.DB,row)) throw new HttpError(409,'Open the authorized Google Drive link to download this image.');
+    if(!env.DRIVE_MEDIA_KEY) throw new HttpError(503,'The CT download service has not been configured.');
+  }else if (!env.IMAGES) throw new HttpError(503, 'Private image storage is unavailable.');
   const output = new Headers(headers);
   output.set('Content-Type', 'application/octet-stream');
   output.set('Accept-Ranges','bytes');
+  output.set('Access-Control-Expose-Headers','Content-Range, Content-Length, Accept-Ranges');
   let range;
-  try { range = byteRange(request.headers.get('Range'),row.image_size); }
+  const head = request.method === 'HEAD';
+  try {
+    range = byteRange(request.headers.get('Range'),row.image_size);
+    if (drive && (!head||range) && (range?.length??row.image_size)>maxDriveRange) throw new HttpError(416,'Request a smaller byte range.');
+  }
   catch {
     output.set('Content-Range','bytes */' + row.image_size);
     return new Response(null,{status:416,headers:output});
   }
-  const head = request.method === 'HEAD';
-  const obj = head ? await bucket.head(row.image_key)
-    : await bucket.get(row.image_key,range ? {range} : {});
-  if (!obj || obj.size !== row.image_size) throw new HttpError(503,'Case image is unavailable or incomplete.');
   output.set('Content-Length',String(range?.length ?? row.image_size));
   if (range) output.set('Content-Range','bytes ' + range.offset + '-' + (range.offset + range.length - 1) + '/' + row.image_size);
+  if(drive){
+    const body=head?null:await driveMediaBytes(request,drive,env.DRIVE_MEDIA_KEY,range,row.image_size);
+    return new Response(body,{status:range?206:200,headers:output});
+  }
+  const obj = head ? await env.IMAGES.head(row.image_key)
+    : await env.IMAGES.get(row.image_key,range ? {range} : {});
+  if (!obj || obj.size !== row.image_size) throw new HttpError(503,'Case image is unavailable or incomplete.');
   return new Response(head ? null : obj.body,{status:range ? 206 : 200,headers:output});
 }
 
@@ -256,7 +327,7 @@ export default {
         const item = await authorizedCase(env.DB,user,id);
         if (!action && request.method === 'GET') return reply(await caseDetails(env.DB,user,item));
         if (action === 'image' && ['GET','HEAD'].includes(request.method)) {
-          return await imageResponse(request,env.IMAGES,item,headers);
+          return await imageResponse(request,env,item,headers);
         }
         if (action === 'ratings' && request.method === 'POST') {
           requireRole(user,'doctor');

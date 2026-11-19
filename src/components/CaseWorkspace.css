@@ -22,10 +22,20 @@
   .clinical-case .review-topbar { min-width: 0; flex-wrap: wrap; height: auto; min-height: 46px; }
 }
 .table-scroll.case-workspace-scroll {
-  max-height: clamp(14rem, 43vh, 23rem);
+  max-height: clamp(22rem, 74vh, 62rem);
   overflow: auto;
   scrollbar-gutter: stable;
 }
+.home-page:has(.case-workspace-scroll) { padding-block-start: 20px; }
+.home-page:has(.case-workspace-scroll) .page-heading { margin-bottom: 16px; }
+.home-page:has(.case-workspace-scroll) .summary-strip { margin-bottom: 16px; }
+.home-page:has(.case-workspace-scroll) .summary-strip > div { padding-block: 10px; }
+.home-page:has(.case-workspace-scroll) .work-card > .section-heading { padding-block: 9px; }
+.case-workspace-scroll td { padding: 5px clamp(8px, 1.5vw, 24px); }
+.case-workspace-scroll th { padding-inline: clamp(8px, 1.5vw, 24px); }
+.case-workspace-scroll .case-title small { margin-top: 2px; }
+.case-workspace-scroll .study-icon { width: 31px; height: 31px; }
+.case-workspace-scroll .review-link { min-height: 33px; }
 .case-workspace-scroll thead th {
   position: sticky;
   top: 0;
@@ -35,4 +45,13 @@
 .case-workspace-scroll:focus-visible {
   outline: 2px solid var(--accent, #2866ce);
   outline-offset: -2px;
+}
+@media (max-width: 600px) {
+  .home-page:has(.case-workspace-scroll) .section-heading > .muted { display: none; }
+  .case-workspace-scroll :is(th,td):nth-child(2),
+  .case-workspace-scroll :is(th,td):nth-child(3),
+  .case-workspace-scroll .study-icon { display: none; }
+  .case-workspace-scroll .case-title { overflow-wrap: anywhere; }
+  .case-workspace-scroll .review-meter { width: auto; min-width: 6rem; }
+  .case-workspace-scroll .review-link { min-height: 42px; }
 }

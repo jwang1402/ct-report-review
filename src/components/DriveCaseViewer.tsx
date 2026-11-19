@@ -17,17 +17,18 @@ export default function DriveCaseViewer({study,publicReader=false}:{study:StudyD
   const current=useRef<AbortController|null>(null);
   useEffect(()=>()=>current.current?.abort(),[]);
   const {drive_url:url,size,sha256}=study.imaging;
+  const caseId=study.case_id;
   useEffect(()=>{
     if(!publicReader||!url)return;
     const controller=new AbortController();
     current.current=controller;
     setError('');setFile(null);
-    downloadPublicDriveCase(url,{size,sha256},controller.signal,value=>{if(!controller.signal.aborted)setProgress(value);})
+    downloadPublicDriveCase(url,{size,sha256},controller.signal,value=>{if(!controller.signal.aborted)setProgress(value);},caseId)
       .then(value=>{if(!controller.signal.aborted)setFile(value);})
       .catch(e=>{if(!controller.signal.aborted)setError(message(e));})
       .finally(()=>{if(!controller.signal.aborted)setProgress(null);});
     return ()=>controller.abort();
-  },[publicReader,retry,url,size,sha256]);
+  },[publicReader,retry,url,size,sha256,caseId]);
   async function openFile(selected:File) {
     current.current?.abort();
     const controller=new AbortController();

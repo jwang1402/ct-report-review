@@ -168,6 +168,7 @@ test('name-only readers are isolated, even with identical names, and only see an
   assert.equal((await (await api('/blind/cases/PrivateStudy-Case01',null,admin)).json()).public_ct,undefined);
   assert.equal((await api('/blind/cases/PrivateStudy-Case01',null,first.token)).status,404);
   const report=await (await api(path,null,first.token)).json();
+  assert.equal(report.public_ct,true);
   assert.deepEqual(report.reports.map(r=>r.letter),[...'ABCD']);
   assert.equal(JSON.stringify(report).includes('opaque-'),false);
   const answers={revision:report.revision,ratings:[...'ABCD'].map(letter=>({letter,rating:5,comment:'first reader only'}))};
@@ -190,7 +191,21 @@ test('name-only readers are isolated, even with identical names, and only see an
   assert.equal((await api('/logout',{},first.token)).status,200);
   assert.equal((await api('/public/readers',admission)).status,403);
   assert.equal((await api(path,null,first.token)).status,401);
+  const credentials={username:'assigned-reader',password:'sample-test-password'};
+  assert.equal((await api('/admin/doctors',credentials,admin)).status,201);
+  const reader=(await (await api('/login',credentials)).json()).token;
+  assert.equal((await api(path,null,reader)).status,404);
+  for(const study of [prefix,packet.prefix]){
+    assert.equal((await api('/admin/enrollment',{username:credentials.username,prefix:study},admin)).status,200);
+  }
+  const publicCase=await (await api(path,null,reader)).json();
+  assert.equal(publicCase.public_ct,true);
+  assert.equal(publicCase.imaging.drive_url,sample.drive_url);
+  const restrictedCase=await (await api('/blind/cases/PrivateStudy-Case01',null,reader)).json();
+  assert.equal(restrictedCase.public_ct,undefined);
+  assert.equal(restrictedCase.imaging.drive_url,sample.drive_url);
   assert.equal((await api('/admin/public-studies',{prefix,enabled:false},admin)).status,200);
+  assert.equal((await (await api(path,null,reader)).json()).public_ct,undefined);
   assert.equal((await api(path,null,second.token)).status,401);
   assert.deepEqual(await publicList(),{studies:[]});
   assert.equal((await api('/admin/drive-studies',opened,admin)).status,200);

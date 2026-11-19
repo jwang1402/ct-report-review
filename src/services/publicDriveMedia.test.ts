@@ -1,6 +1,7 @@
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {downloadPublicDriveCase,verifyPublicDriveCase,type DriveImageProgress} from './publicDriveMedia';
 import {hashBlob} from './fileHash';
+vi.mock('./session',()=>({apiBase:'https://review.example',sessionToken:()=>'fixture-session'}));
 
 const bytes=new Uint8Array([31,139,1,2,3]);
 const id='fixture-only-ct-file',key='fixture_resource_key';
@@ -54,4 +55,32 @@ it('reports streamed bytes against the case size without Content-Length, then ve
       {stage:'download',received:5,total:5}, {stage:'verify',percent:0}, {stage:'verify',percent:100}
     ]);
   } finally {vi.restoreAllMocks();}
+});
+
+it('keeps completed ranges when a different origin must supply the remainder',async()=>{
+  const stride=4*1024*1024;
+  const scan=new Uint8Array(stride+3);
+  scan.set(bytes);scan.set([3,9,7],stride);
+  const expected={size:scan.length,sha256:await hashBlob(new Blob([scan]))};
+  const partial=(first:number,last:number)=>new Response(scan.subarray(first,last+1),{status:206,
+    headers:{'Content-Range':'bytes '+first+'-'+last+'/'+scan.length}});
+  fetchMock.mockResolvedValueOnce(partial(0,stride-1)).mockRejectedValueOnce(new TypeError('Failed to fetch'))
+    .mockResolvedValueOnce(partial(stride,scan.length-1));
+  const output=await downloadPublicDriveCase(link,expected,signal,undefined,'Study-Case01');
+  expect(output.size).toBe(scan.length);
+  expect(fetchMock.mock.calls.map(([,init])=>new Headers(init?.headers).get('Range'))).toEqual(
+    ['bytes=0-4194303','bytes=4194304-4194306','bytes=4194304-4194306']);
+  const sources=fetchMock.mock.calls;
+  expect(new Headers(sources[0][1]?.headers).has('Authorization')).toBe(false);
+  expect(sources[2][0]).toBe('https://review.example/blind/cases/Study-Case01/image');
+  expect(new Headers(sources[2][1]?.headers).get('Authorization')).toBe('Bearer fixture-session');
+});
+
+it('does not accept a different file from the review service or reuse a restricted session',async()=>{
+  const expected={size:bytes.length,sha256:await hashBlob(new Blob([bytes]))};
+  fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch')).mockResolvedValueOnce(new Response(new Uint8Array(bytes.length)));
+  await expect(downloadPublicDriveCase(link,expected,signal,undefined,'Study-Case01')).rejects.toThrow('does not match');
+  fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+    .mockResolvedValueOnce(Response.json({error:'Case not found.'},{status:404}));
+  await expect(downloadPublicDriveCase(link,expected,signal,undefined,'Other-Case02')).rejects.toThrow('Case not found');
 });

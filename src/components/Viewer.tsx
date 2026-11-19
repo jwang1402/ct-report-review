@@ -7,7 +7,7 @@ import * as tools from '@cornerstonejs/tools';
 import dicom from '@cornerstonejs/dicom-image-loader';
 import {cornerstoneNiftiImageLoader,createNiftiImageIdsAndCacheMetadata} from '@cornerstonejs/nifti-volume-loader';
 import dicomParser from 'dicom-parser';
-import {unzipFiles,gunzipBytes} from '../services/volumeArchive';
+import {unzipFiles,prepareNiftiBlob} from '../services/volumeArchive';
 import {downloadAsset} from '../services/github/releaseAssets';
 import type {ImagingAsset, ReleaseAsset} from '../types';
 import {sizeLabel,message} from '../utils';
@@ -42,12 +42,26 @@ export default function Viewer({item,privateCase=false,verifiedFile}:{item:Viewe
   }catch(e){if(!controller.signal.aborted)setError(message(e));}})();return()=>controller.abort();
  },[item.case_id,item.asset.size,item.asset.url,item.asset.sha256,privateCase,verifiedFile,retry,localFile]);
  useEffect(()=>{const picked=series.find(s=>s.uid===selected);if(!blob&&!picked)return;
+  const controller=new AbortController();
   let closed=false,engine:cs.RenderingEngine|undefined,url:string|undefined,volumeId:string|undefined;const imageIds:string[]=[];const registeredFiles:number[]=[];const id=crypto.randomUUID();const viewIds=axes.map((_,i)=>`${id}-${i}`);const observers:ResizeObserver[]=[];const listeners:Array<()=>void>=[];
   setReady(false);setError('');
   const clean=()=>{observers.splice(0).forEach(o=>o.disconnect());listeners.splice(0).forEach(fn=>fn());tools.ToolGroupManager.destroyToolGroup(id);engine?.destroy();engine=undefined;if(volumeId&&cs.cache.getVolume(volumeId))cs.cache.removeVolumeLoadObject(volumeId);for(const imageId of imageIds){if(cs.cache.getImageLoadObject(imageId))cs.cache.removeImageLoadObject(imageId,{force:true});}registeredFiles.splice(0).forEach(index=>dicom.wadouri.fileManager.remove(index));if(url){URL.revokeObjectURL(url);url=undefined;}if(engineRef.current?.id===id){engineRef.current=null;groupRef.current=undefined;}};
   (async()=>{try{
    setProgress(undefined);setBytesLabel('');setStatus('Initializing CT viewer…');await init();if(closed)return;
-   if(blob){setStatus('Preparing NIfTI volume…');let source=blob;const magic=new Uint8Array(await blob.slice(0,2).arrayBuffer());if(magic[0]===31&&magic[1]===139)source=new Blob([await gunzipBytes(new Uint8Array(await blob.arrayBuffer()))]);if(source.size>=2*1024**3)throw new Error('Expanded NIfTI exceeds 2 GiB.');url=URL.createObjectURL(source);imageIds.push(...await createNiftiImageIdsAndCacheMetadata({url}));}
+   if(blob){
+    setStatus('Preparing NIfTI volume…');
+    const source=await prepareNiftiBlob(blob,controller.signal);
+    if(closed)return;
+    url=URL.createObjectURL(source);
+    imageIds.push(...await createNiftiImageIdsAndCacheMetadata({url}));
+    if(closed)return;
+    if(imageIds.length){
+     // The NIfTI loader fetches all voxels on its first frame. Let that request
+     // finish before queuing slices that wait for its in-memory data.
+     setStatus('Reading CT pixels');
+     await cs.imageLoader.loadAndCacheImage(imageIds[0]);
+    }
+   }
    else if(picked){for(let i=0;i<picked.files.length;i++){if(closed)return;const f=picked.files[i];const ds=dicomParser.parseDicom(new Uint8Array(await f.arrayBuffer()),{untilTag:'x7fe00010'});const n=Number(ds.string('x00280008')||1);const imageId=dicom.wadouri.fileManager.add(f);registeredFiles.push(Number(imageId.split(":")[1]));for(let frame=1;frame<=n;frame++){const fid=n>1?`${imageId}?frame=${frame}`:imageId;await cs.imageLoader.loadAndCacheImage(fid);imageIds.push(fid);}if(!closed){setStatus('Preparing DICOM series');setProgress((i+1)/picked.files.length);setBytesLabel((i+1)+' / '+picked.files.length+' files');}}}
    if(closed)return;
    if(!imageIds.length)throw new Error('Imaging dataset contains no slices.');
@@ -62,7 +76,16 @@ export default function Viewer({item,privateCase=false,verifiedFile}:{item:Viewe
    };
    cs.eventTarget.addEventListener(cs.Enums.Events.IMAGE_VOLUME_MODIFIED,frameProgress);
    listeners.push(()=>cs.eventTarget.removeEventListener(cs.Enums.Events.IMAGE_VOLUME_MODIFIED,frameProgress));
-   await new Promise<void>((resolve,reject)=>{volume.load((event:unknown)=>{const e=event as {success?:boolean;framesLoaded?:number;totalNumFrames?:number};if(e.success===false||e.framesLoaded!==undefined&&e.framesLoaded!==e.totalNumFrames)reject(new Error('Volume pixel loading failed.'));else resolve();});});
+   await new Promise<void>((resolve,reject)=>{
+    const cancel=()=>reject(controller.signal.reason);
+    controller.signal.addEventListener('abort',cancel,{once:true});
+    volume.load((event:unknown)=>{
+     controller.signal.removeEventListener('abort',cancel);
+     const e=event as {success?:boolean;framesLoaded?:number;totalNumFrames?:number};
+     if(e.success===false||e.framesLoaded!==undefined&&e.framesLoaded!==e.totalNumFrames)reject(new Error('Volume pixel loading failed.'));
+     else resolve();
+    });
+   });
    if(closed)return;
    setStatus('Rendering CT views');setProgress(undefined);setBytesLabel('');
    engine=new cs.RenderingEngine(id);engineRef.current=engine;
@@ -75,7 +98,7 @@ export default function Viewer({item,privateCase=false,verifiedFile}:{item:Viewe
    viewIds.forEach((vid,i)=>{const element=elements.current[i]!;const viewport=engine!.getViewport(vid) as cs.VolumeViewport;viewport.setProperties({voiRange:{lower:-160,upper:240}});const update=()=>{if(closed)return;setSlices(s=>s.map((old,j)=>j===i?{index:viewport.getSliceIndex(),total:viewport.getNumberOfSlices()}:old));};element.addEventListener(cs.Enums.Events.IMAGE_RENDERED,update);listeners.push(()=>element.removeEventListener(cs.Enums.Events.IMAGE_RENDERED,update));const observer=new ResizeObserver(()=>{if(!closed){engine?.resize(true,false);engine?.render();}});observer.observe(element);observers.push(observer);});
    engine.render();setReady(true);setStatus('Volume ready');setActiveTool('WindowLevel');setPreset('Soft Tissue');
   }catch(e){if(!closed)setError(`Unable to initialize CT viewer. ${message(e)}`);}finally{if(closed)clean();}})();
-  return()=>{closed=true;clean();};
+  return()=>{closed=true;controller.abort();clean();};
  },[blob,selected,series]);
  function chooseTool(name:string){const group=groupRef.current;if(!group)return;['WindowLevel','Pan','Zoom','StackScroll'].forEach(t=>group.setToolPassive(t));group.setToolActive(name,{bindings:[{mouseButton:tools.Enums.MouseBindings.Primary}]});setActiveTool(name);}
  function applyPreset(name:string){setPreset(name);const [w,l]=presets[name];engineRef.current?.getViewports().forEach(v=>{(v as cs.VolumeViewport).setProperties({voiRange:{lower:l-w/2,upper:l+w/2}});v.render();});}

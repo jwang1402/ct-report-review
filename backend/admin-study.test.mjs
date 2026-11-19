@@ -75,6 +75,97 @@ test('linked Drive CTs publish without R2 and expose the file link and digest on
   assert.ok(other.reports.every(report=>report.rating===null));
   assert.equal((await call('/admin/cases/Drive-Case01/editor','a')).body.locked,true);
 });
+test('Drive fallback relays only matching, bounded bytes of an assigned, publicly enabled case',async t=>{
+  const sqlite=new DatabaseSync(':memory:'); t.after(()=>sqlite.close());
+  sqlite.exec(readFileSync(new URL('./schema.sql',import.meta.url),'utf8'));
+  const env={DB:database(sqlite),DRIVE_MEDIA_KEY:'test-only-drive-key'};
+  for(const name of ['assigned','unassigned']){
+    sqlite.prepare('INSERT INTO accounts VALUES(?,?,?,?)').run(name,'doctor','fixture','stamp');
+    sqlite.prepare('INSERT INTO account_sessions VALUES(?,?,?,?,?)').run(await digest(name),name,'doctor','stamp',20000000000);
+  }
+  const id='Review-Case01',fileId='public_file_01',size=5*1024*1024;
+  sqlite.exec("INSERT INTO web_batches VALUES('batch','Review','{}','published'); INSERT INTO public_studies VALUES('Review',1)");
+  const imageKey='blind/Review/Case01/drive/'+'a'.repeat(64)+'/'+fileId+'?resourcekey=0-safe';
+  sqlite.prepare('INSERT INTO private_cases VALUES(?,?,?,?,?)').run(id,'Test',imageKey,'scan.nii.gz',size);
+  for(const letter of 'ABCD'){
+    sqlite.prepare('INSERT INTO private_reports VALUES(?,?,?)').run(id,letter,'English test');
+    sqlite.prepare('INSERT INTO assignments(username,case_id,letter,model_name,case_order) VALUES(?,?,?,?,?)').run('assigned',id,letter,letter,1);
+  }
+  const origin='https://jwang1402.github.io';
+  const call=(token,range,method='GET',source={Origin:origin,Referer:origin+'/ct-report-review/?local=private'})=>worker.fetch(new Request('https://fixture.invalid/blind/cases/'+id+'/image',{
+    method,headers:{...source,...(token&&{Authorization:'Bearer '+token}),...(range&&{Range:range})}
+  }),env);
+  const bytes=new Uint8Array([31,139]);
+  let upstream;
+  const relay=t.mock.method(globalThis,'fetch',async(input,init)=>{
+    const url=new URL(input);
+    assert.equal(url.origin,'https://www.googleapis.com');
+    assert.equal(url.pathname,'/drive/v3/files/'+fileId);
+    assert.equal(url.searchParams.get('alt'),'media');
+    assert.equal(url.searchParams.has('access_token'),false);
+    assert.equal(init.redirect,'manual');
+    assert.equal(init.cache,'no-store');
+    assert.equal(init.headers.get('X-Goog-Api-Key'),env.DRIVE_MEDIA_KEY);
+    assert.equal(init.headers.get('X-Goog-Drive-Resource-Keys'),fileId+'/0-safe');
+    assert.equal(init.headers.get('Authorization'),null);
+    assert.equal(init.headers.get('Cookie'),null);
+    return upstream;
+  });
+  assert.equal((await call(null,'bytes=0-1')).status,401);
+  assert.equal((await call('unassigned','bytes=0-1')).status,404);
+  for(const range of [undefined,'bytes=0-4194304','bytes=0-0,2-2']){
+    const invalid=await call('assigned',range);
+    assert.equal(invalid.status,416);
+    assert.equal(invalid.headers.get('Content-Range'),'bytes */'+size);
+  }
+  assert.equal(relay.mock.callCount(),0);
+  const interval='bytes 300-301/'+size;
+  const part=(body=bytes,headers={},status=206)=>new Response(body,{status,headers:{'Content-Range':interval,...headers}});
+  upstream=part();
+  const valid=await call('assigned','bytes=300-301');
+  assert.equal(valid.status,206);
+  assert.deepEqual(new Uint8Array(await valid.arrayBuffer()),bytes);
+  assert.equal(valid.headers.get('Content-Range'),interval);
+  assert.equal(valid.headers.get('Content-Length'),'2');
+  assert.equal(valid.headers.get('Access-Control-Allow-Origin'),origin);
+  assert.match(valid.headers.get('Access-Control-Expose-Headers'),/Content-Range/);
+  assert.match(valid.headers.get('Cache-Control'),/no-store/);
+  assert.equal(valid.headers.get('X-Goog-Api-Key'),null);
+  assert.equal(relay.mock.calls[0].arguments[1].headers.get('Range'),'bytes=300-301');
+  const forwarded=()=>relay.mock.calls.at(-1).arguments[1].headers;
+  assert.equal(forwarded().get('Origin'),origin);
+  assert.equal(forwarded().get('Referer'),origin+'/');
+  for(const source of [{Origin:origin},{Referer:origin+'/'},{Origin:origin,Referer:'https://elsewhere.invalid/'},{Origin:origin,Referer:'not a URL'},
+    {Origin:'http://localhost:5173',Referer:'http://localhost:5173/'},{}]){
+    upstream=part(); assert.equal((await call('assigned','bytes=300-301','GET',source)).status,206);
+    assert.equal(forwarded().get('Origin'),null);
+    assert.equal(forwarded().get('Referer'),null);
+  }
+  upstream=new Response('private diagnostic test-only-drive-key',{status:403});
+  const forbidden=await call('assigned','bytes=300-301');
+  assert.equal(forbidden.status,403);
+  assert.deepEqual(await forbidden.json(),{error:'Google Drive denied access to this CT download.'});
+  for(const bad of [new Response(bytes,{status:200}),part(bytes,{'Content-Range':'bytes 0-1/'+size}),
+    part(bytes,{'Content-Range':'bytes 300-301/'+(size+1)}),part(bytes,{'Content-Length':'9'}),part(new Uint8Array(1)),
+    part(new Uint8Array(3)),part(bytes,{'Content-Encoding':'gzip'}),part(bytes,{'Content-Type':'application/json'}),
+    new Response(null,{status:302,headers:{Location:'https://other.invalid/private'}})]){
+    upstream=bad;
+    const result=await call('assigned','bytes=300-301');
+    assert.equal(result.status,502);
+    assert.doesNotMatch(await result.text(),/0-safe|test-only-drive-key|other.invalid/);
+  }
+  sqlite.prepare('UPDATE private_cases SET image_size=2 WHERE case_id=?').run(id);
+  upstream=new Response(bytes,{headers:{'Content-Length':'2'}});
+  const small=await call('assigned');
+  assert.equal(small.status,200);
+  assert.deepEqual(new Uint8Array(await small.arrayBuffer()),bytes);
+  const before=relay.mock.callCount();
+  delete env.DRIVE_MEDIA_KEY;
+  assert.equal((await call('assigned','bytes=0-1')).status,503);
+  sqlite.exec("UPDATE public_studies SET enabled=0 WHERE prefix='Review'");
+  assert.equal((await call('assigned','bytes=0-1')).status,409);
+  assert.equal(relay.mock.callCount(),before);
+});
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
 function storage(){
   const uploads=new Map(), objects=new Map();
