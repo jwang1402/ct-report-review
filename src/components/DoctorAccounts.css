@@ -1,0 +1,7 @@
+.reader-admin { max-width: 1060px; }
+.doctor-entry { padding: 17px 20px; margin-bottom: 18px; display: flex; flex-wrap: wrap; gap: 7px 20px; }
+.doctor-entry a { overflow-wrap: anywhere; }
+.reader-admin-forms { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 18px; }
+.reader-admin-forms form { display: grid; align-content: start; gap: 13px; }
+.reader-admin-forms button { justify-self: start; }
+.reader-admin-forms label { display: grid; gap: 6px; }

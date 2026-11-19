@@ -1,16 +1,19 @@
 {
-  "name": "ct-report-review-api",
+  "name": "ct-blind-reader-api",
   "main": "worker.mjs",
   "compatibility_date": "2026-09-08",
   "workers_dev": true,
-  "vars": {
-    "LOGIN_USERNAME": "ctreport"
-  },
   "triggers": {
     "crons": [
       "0 0 * * *"
     ]
   },
+  "r2_buckets": [
+    {
+      "binding": "IMAGES",
+      "bucket_name": "ct-report-review-private-images"
+    }
+  ],
   "d1_databases": [
     {
       "binding": "DB",

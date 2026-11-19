@@ -2,56 +2,183 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {readFileSync} from 'node:fs';
-import worker,{passwordHash,validateReview} from './worker.mjs';
-function database(){const db=new DatabaseSync(':memory:');db.exec(readFileSync(new URL('./schema.sql',import.meta.url),'utf8'));return {prepare(sql){const statement=db.prepare(sql);let args=[];return {bind(...a){args=a;return this;},async first(){return statement.get(...args)||null;},async all(){return {results:statement.all(...args)};},async run(){return statement.run(...args);}};},async batch(a){return Promise.all(a.map(x=>x.run()));}};}
-const env={DB:database(),LOGIN_USERNAME:'ctreport',PASSWORD_SALT:'unit-test-salt',PASSWORD_HASH:await passwordHash('test-password','unit-test-salt')};
-const call=(path,data,token,origin='https://jwang1402.github.io')=>worker.fetch(new Request('https://test.invalid'+path,{method:data?'POST':'GET',headers:{Origin:origin,'Content-Type':'application/json',...(token?{Authorization:'Bearer '+token}:{})},...(data?{body:JSON.stringify(data)}:{})}),env);
-let token;
-test('unauthenticated and forged sessions cannot read or write reviews',async()=>{assert.equal((await call('/reviews')).status,401);assert.equal((await call('/reviews',{},'fake')).status,401);assert.equal((await call('/session',null,'fake')).status,401);});
-test('wrong password fails; correct password creates a server session',async()=>{assert.equal((await call('/login',{username:'ctreport',password:'wrong'})).status,401);const r=await call('/login',{username:'ctreport',password:'test-password'});assert.equal(r.status,200);token=(await r.json()).token;assert.equal((await call('/session',null,token)).status,200);});
-test('CORS only allows configured websites',async()=>{assert.equal((await call('/session',null,token,'https://attacker.invalid')).status,403);});
-test('name and rating are required',async()=>{assert.equal((await call('/reviews',{schema:'ct-review-v1'},token)).status,400);});
-test('reviews persist and retry does not create duplicate submissions',async()=>{
- const original=globalThis.fetch;globalThis.fetch=async url=>Response.json(String(url).endsWith('removed-cases.json')?{cases:[]}:{cases:[{case_id:'sample',review_id:1,reports:[{id:'report',model_name:'Model'}]}]});
- try{const data={schema:'ct-review-v1',case_id:'sample',release_id:1,report_id:'report',model_name:'Model',reviewer:'Doctor Test',decision:'5',comment:'Test only',submission_id:crypto.randomUUID()};assert.equal((await call('/reviews',data,token)).status,201);assert.equal((await call('/reviews',data,token)).status,201);const saved=await (await call('/reviews',null,token)).json();assert.equal(saved.reviews.length,1);assert.equal(saved.reviews[0].reviewer,'Doctor Test');assert.equal((await call('/reviews',{...data,comment:'Changed'},token)).status,409);}finally{globalThis.fetch=original;}
-});
-test('editing updates one record and rejects stale or unauthenticated changes',async()=>{
- const original=(await(await call('/reviews',null,token)).json()).reviews[0];
- const updated={...original,decision:'3',comment:'Revised feedback',previous:{reviewer:original.reviewer,decision:original.decision,comment:original.comment}};
- const path='/reviews/'+original.submission_id+'/update';
- assert.equal((await call(path,updated)).status,401);
- assert.equal((await call(path,{...updated,decision:'6'},token)).status,400);
- assert.equal((await call(path,updated,token)).status,200);
- assert.equal((await call(path,updated,token)).status,200);
- assert.equal((await call(path,{...updated,comment:'Stale overwrite'},token)).status,409);
- const rows=(await(await call('/reviews',null,token)).json()).reviews;
- assert.equal(rows.length,1);assert.equal(rows[0].decision,'3');assert.equal(rows[0].submission_id,original.submission_id);assert.equal(rows[0].created_at,original.created_at);
-});
-test('multi-report submissions require every report and preserve retry identity',async()=>{
- const original=globalThis.fetch;globalThis.fetch=async url=>Response.json(String(url).endsWith('removed-cases.json')?{cases:[]}:{cases:[{case_id:'multi',review_id:2,reports:[{id:'a',model_name:'A'},{id:'b',model_name:'B'}]}]});
- try{
- const a={schema:'ct-review-v1',case_id:'multi',release_id:2,report_id:'a',model_name:'A',reviewer:'Doctor',decision:'5',comment:'',submission_id:crypto.randomUUID()},b={...a,report_id:'b',model_name:'B',submission_id:crypto.randomUUID()};
- assert.equal((await call('/reviews',a,token)).status,400);
- assert.equal((await call('/reviews/batch',{reviews:[a]},token)).status,400);
- assert.equal((await call('/reviews/batch',{reviews:[a,{...b,decision:'0'}]},token)).status,400);
- assert.equal((await call('/reviews/batch',{reviews:[a,a]},token)).status,400);
- assert.equal((await(await call('/reviews',null,token)).json()).reviews.filter(r=>r.case_id==='multi').length,0);
- assert.equal((await call('/reviews/batch',{reviews:[a,b]},token)).status,201);
- assert.equal((await call('/reviews/batch',{reviews:[{...a,reviewer:'Another doctor',submission_id:crypto.randomUUID()}]},token)).status,400);
- assert.equal((await call('/reviews/batch',{reviews:[a,b]},token)).status,201);
- assert.equal((await(await call('/reviews',null,token)).json()).reviews.filter(r=>r.case_id==='multi').length,2);
- }finally{globalThis.fetch=original;}
-});
-test('delete removes only the selected review, rejects stale data and allows retries',async()=>{
- const rows=(await(await call('/reviews',null,token)).json()).reviews,r=rows[0],path='/reviews/'+r.submission_id+'/delete',data={previous:{reviewer:r.reviewer,decision:r.decision,comment:r.comment}};
- assert.equal((await call(path,data)).status,401);
- assert.equal((await call(path,{previous:{...data.previous,comment:'stale'}},token)).status,409);
- assert.equal((await call(path,data,token)).status,200);
- assert.equal((await call(path,data,token)).status,200);
- const after=(await(await call('/reviews',null,token)).json()).reviews;assert.equal(after.length,rows.length-1);assert.ok(!after.some(x=>x.submission_id===r.submission_id));
-});
-test('logout revokes the session at the server',async()=>{assert.equal((await call('/logout',{},token)).status,200);assert.equal((await call('/session',null,token)).status,401);});
+import worker,{digest,passwordHash} from './worker.mjs';
 
+const sqlFile = name => readFileSync(new URL(name,import.meta.url),'utf8');
+function fixture() {
+  const db = new DatabaseSync(':memory:');
+  db.exec(sqlFile('./schema.sql'));
+  const DB = {
+    prepare(sql) {
+      const stmt=db.prepare(sql);
+      let args=[];
+      return {bind(...a){args=a;return this;},async first(){return stmt.get(...args)||null;},
+        async all(){return {results:stmt.all(...args)};},async run(){return stmt.run(...args);}};
+    },
+    async batch(statements) {
+      db.exec('BEGIN');
+      try {
+        const results = await Promise.all(statements.map(statement => statement.run()));
+        db.exec('COMMIT');
+        return results;
+      } catch (error) {
+        db.exec('ROLLBACK');
+        throw error;
+      }
+    }
+  };
+  return {db,env:{DB}};
+}
+function call(env,path,data,token,origin='https://jwang1402.github.io') {
+  return worker.fetch(new Request('https://example.test'+path,{method:data?'POST':'GET',
+    headers:{Origin:origin,'Content-Type':'application/json',...(token?{Authorization:'Bearer '+token}:{})},
+    ...(data?{body:JSON.stringify(data)}:{})}),env);
+}
 
-test('all five ratings allow empty comments; invalid and legacy choices cannot be submitted',()=>{const r={schema:'ct-review-v1',case_id:'sample',release_id:1,report_id:'report',model_name:'Model',reviewer:'Doctor',comment:'',submission_id:crypto.randomUUID()};for(const decision of ['1','2','3','4','5'])assert.equal(validateReview({...r,decision}).decision,decision);for(const decision of ['0','6','2.5','ACCEPT','PARTIAL_ACCEPT','REJECT',null,3])assert.throws(()=>validateReview({...r,decision}));});
-test('migration preserves legacy records and permits new ratings',()=>{const db=new DatabaseSync(':memory:');db.exec(readFileSync(new URL('./schema.sql',import.meta.url),'utf8').replace("'1','2','3','4','5',",''));db.exec("INSERT INTO reviews VALUES (7,'legacy-submission','sample',1,'report','Model','Doctor','ACCEPT','','2026-09-01')");db.exec(readFileSync(new URL('./migrations/0001_findings_rating.sql',import.meta.url),'utf8'));assert.equal(db.prepare('SELECT decision FROM reviews WHERE id=7').get().decision,'ACCEPT');db.exec("UPDATE reviews SET decision='4' WHERE id=7");assert.equal(db.prepare('SELECT decision FROM reviews WHERE id=7').get().decision,'4');db.close();});
+test('historic records survive the migrations, including free-text reviewer and legacy decisions',()=>{
+  const db=new DatabaseSync(':memory:');
+  db.exec(sqlFile('./schema.sql').split('-- Existing shared sessions')[0].replace("'1','2','3','4','5',",''));
+  db.exec("INSERT INTO reviews VALUES (7,'legacy-submission','sample',1,'report','Model','Prior reviewer','ACCEPT','','2026-09-01')");
+  db.exec(sqlFile('./migrations/0001_findings_rating.sql'));
+  db.exec(sqlFile('./migrations/0002_private_reader_study.sql'));
+  db.exec(sqlFile('./migrations/0003_shared_case_letters.sql'));
+  assert.deepEqual({...db.prepare('SELECT id,reviewer,decision FROM reviews').get()},{id:7,reviewer:'Prior reviewer',decision:'ACCEPT'});
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM accounts').get().n,0);
+  db.close();
+});
+
+test('migration does not give old sessions or the shared password access to the private study',async()=>{
+  const {db,env}=fixture();
+  const salt='test-legacy-salt';
+  Object.assign(env,{LOGIN_USERNAME:'shared',PASSWORD_SALT:salt,PASSWORD_HASH:await passwordHash('shared-only',salt)});
+  db.prepare('INSERT INTO sessions VALUES(?,?)').run(await digest('old-session'),Math.floor(Date.now()/1000)+3600);
+  assert.equal((await call(env,'/session',null,'old-session')).status,401);
+  assert.equal((await call(env,'/login',{username:'shared',password:'shared-only'})).status,401);
+  assert.equal((await call(env,'/reviews')).status,401);
+  db.close();
+});
+
+test('provisioned admin can read but cannot modify the historical review archive',async()=>{
+  const {db,env}=fixture();
+  const salt='test-salt';
+  db.prepare('INSERT INTO accounts(username,role,password_hash,password_salt) VALUES(?,?,?,?)')
+    .run('coordinator','admin',await passwordHash('testing-password',salt),salt);
+  db.exec("INSERT INTO reviews VALUES(1,'historic-id','sample',83,'report','Model','Old reader','4','','2026-09-01')");
+  const auth=await call(env,'/login',{username:'coordinator',password:'testing-password'});
+  const {token,role}=await auth.json();
+  assert.equal(role,'admin');
+  assert.equal((await (await call(env,'/reviews',null,token)).json()).reviews[0].reviewer,'Old reader');
+  for(const path of ['/reviews','/reviews/batch','/reviews/historic-id/delete','/reviews/historic-id/update']) {
+    assert.equal((await call(env,path,{},token)).status,405);
+  }
+  assert.equal(db.prepare('SELECT decision FROM reviews').get().decision,'4');
+  assert.equal((await call(env,'/session',null,token,'https://other.invalid')).status,403);
+  assert.equal((await call(env,'/logout',{},token)).status,200);
+  assert.equal((await call(env,'/session',null,token)).status,401);
+  db.close();
+});
+
+test('permissions and credential changes invalidate an issued session',async()=>{
+  const {db,env}=fixture();
+  const salt='test-salt';
+  db.prepare('INSERT INTO accounts(username,role,password_hash,password_salt) VALUES(?,?,?,?)')
+    .run('user','doctor',await passwordHash('old-password',salt),salt);
+  const {token}=await (await call(env,'/login',{username:'user',password:'old-password'})).json();
+  assert.equal((await call(env,'/reviews',null,token)).status,403);
+  db.exec("UPDATE accounts SET role='admin' WHERE username='user'");
+  assert.equal((await call(env,'/admin/results',null,token)).status,401);
+  const current=await (await call(env,'/login',{username:'user',password:'old-password'})).json();
+  db.prepare('UPDATE accounts SET password_hash=? WHERE username=?').run(await passwordHash('new-password',salt),'user');
+  assert.equal((await call(env,'/session',null,current.token)).status,401);
+  db.close();
+});
+
+test('doctors sharing a network can sign in independently, with per-user and network failure limits', async t => {
+  const {db, env} = fixture();
+  t.after(() => db.close());
+  const salt = 'test-network';
+  const hash = await passwordHash('sample-password', salt);
+  const create = db.prepare('INSERT INTO accounts VALUES(?,?,?,?)');
+  for (let i = 1; i <= 12; i++) {
+    const username = 'doctor-' + i;
+    create.run(username, 'doctor', salt, hash);
+    assert.equal((await call(env, '/login', {username, password: 'sample-password'})).status, 200);
+  }
+  for (let i = 0; i < 10; i++) {
+    assert.equal((await call(env, '/login', {username:'doctor-1', password:'wrong'})).status, 401);
+  }
+  assert.equal((await call(env, '/login', {username:'doctor-1', password:'sample-password'})).status, 429);
+  assert.equal((await call(env, '/login', {username:'doctor-12', password:'sample-password'})).status, 200);
+  for (let i = 0; i < 50; i++) {
+    assert.equal((await call(env, '/login', {username:'other-' + i, password:'wrong'})).status, 401);
+  }
+  assert.equal((await call(env, '/login', {username:'doctor-12', password:'sample-password'})).status, 429);
+});
+
+test('adding a third doctor shares the same case and report order, and preserves independent ratings', async t => {
+  const {db, env} = fixture();
+  t.after(() => db.close());
+  const letters = ['A', 'B', 'C', 'D'];
+  const models = ['One', 'Two', 'Three', 'Four'];
+  const id = 'Research01';
+  async function newUser(username, role) {
+    const salt = crypto.randomUUID();
+    db.prepare('INSERT INTO accounts VALUES(?,?,?,?)')
+      .run(username, role, salt, await passwordHash('sample-password', salt));
+    if (role === 'doctor') {
+      db.prepare('INSERT INTO assignments(username,case_id,letter,model_name,case_order) ' +
+        'SELECT ?,case_id,letter,model_name,case_order FROM shared_case_letters').run(username);
+    }
+    const response = await call(env, '/login', {username, password: 'sample-password'});
+    assert.equal(response.status, 200);
+    return (await response.json()).token;
+  }
+  async function submit(token, rating) {
+    const ratings = letters.map(letter => ({letter, rating, comment: ''}));
+    assert.equal((await call(env, '/blind/cases/' + id + '/ratings', {ratings}, token)).status, 200);
+  }
+  async function isComplete(token) {
+    const response = await call(env, '/blind/cases', null, token);
+    return (await response.json()).cases.find(item => item.case_id === id).scored;
+  }
+  const caseIds = ['Research02', id];
+  for (const [index, caseId] of caseIds.entries()) {
+    db.prepare('INSERT INTO private_cases VALUES(?,?,?,?,?)').run(caseId, 'Example', caseId, caseId + '.nii.gz', 200);
+    for (const [i, model] of models.entries()) {
+      db.prepare('INSERT INTO private_reports VALUES(?,?,?)').run(caseId, model, 'Example report ' + i);
+      db.prepare('INSERT INTO shared_case_letters VALUES(?,?,?,?)').run(caseId, letters[(i + index) % 4], model, index + 1);
+    }
+  }
+  const admin = await newUser('coordinator', 'admin');
+  const first = await newUser('doctor-one', 'doctor');
+  const second = await newUser('doctor-two', 'doctor');
+  await submit(first, 2);
+  assert.equal(await isComplete(admin), false);
+  await submit(second, 5);
+  assert.equal(await isComplete(admin), true);
+
+  const third = await newUser('doctor-three', 'doctor');
+  assert.equal(await isComplete(admin), false);
+  assert.equal(await isComplete(first), true);
+  assert.equal(await isComplete(third), false);
+  const thirdForm = await (await call(env, '/blind/cases/' + id, null, third)).json();
+  assert.deepEqual(thirdForm.reports.map(report => report.rating), [null, null, null, null]);
+  for (const token of [first, second, third]) {
+    const list = await (await call(env, '/blind/cases', null, token)).json();
+    assert.deepEqual(list.cases.map(c => c.case_id), caseIds);
+    const form = await (await call(env, '/blind/cases/' + id, null, token)).json();
+    assert.deepEqual(form.reports.map(r => [r.letter, r.text]), thirdForm.reports.map(r => [r.letter, r.text]));
+  }
+  assert.throws(() => db.prepare('UPDATE assignments SET case_order=3 WHERE username=? AND case_id=?').run('doctor-one', id),
+    /shared case order/);
+  await submit(third, 4);
+  assert.equal(await isComplete(admin), true);
+  const {results} = await (await call(env, '/admin/results', null, admin)).json();
+  assert.equal(results.length, 24);
+  assert.equal(results.filter(row => row.case_id===id).length, 12);
+  for (const [name, score] of [['doctor-one', 2], ['doctor-two', 5], ['doctor-three', 4]]) {
+    const userResults = results.filter(row => row.username === name && row.case_id === id);
+    assert.deepEqual(userResults.map(row => row.rating), [score, score, score, score]);
+    assert.equal(userResults.find(row => row.model_name === 'One').letter, 'B');
+  }
+});

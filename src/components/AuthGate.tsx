@@ -1,14 +1,65 @@
-import {useEffect,useState,type ReactNode} from 'react';
+import {useEffect, useState, type FormEvent, type ReactNode} from 'react';
 import {useLocation} from 'react-router-dom';
 import {ScanLine} from 'lucide-react';
-import {api,login,sessionToken,clearSession} from '../services/session';
-export function AuthGate({children}:{children:ReactNode}){
- const location=useLocation(),[valid,setValid]=useState(false),[checking,setChecking]=useState(true),[username,setUsername]=useState(''),[password,setPassword]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false);
- useEffect(()=>{const end=()=>{setValid(false);setPassword('');window.location.hash='/login';};window.addEventListener('ct-session-ended',end);return()=>window.removeEventListener('ct-session-ended',end);},[]);
- useEffect(()=>{let alive=true;setChecking(true);async function check(){if(!sessionToken()){setValid(false);if(location.pathname!=='/login')window.location.hash='/login';setChecking(false);return;}try{await api('/session');if(alive)setValid(true);}catch(e){if(alive){setValid(false);setError(e instanceof Error?e.message:'Sign in again.');}}finally{if(alive)setChecking(false);}}void check();return()=>{alive=false;};},[location.pathname]);
- useEffect(()=>{if(!valid)return;const timer=setInterval(()=>{void api('/session').catch(()=>clearSession());},60000);return()=>clearInterval(timer);},[valid]);
- if(checking)return <main className="login-page"><span className="spinner"/>Checking session…</main>;
- if(valid)return children;
- return <main className="login-page"><form className="form-card login-card" onSubmit={async e=>{e.preventDefault();if(busy)return;setBusy(true);setError('');try{await login(username,password);setPassword('');setValid(true);window.location.hash='/';}catch(e){setPassword('');setError(e instanceof Error?e.message:'Sign-in failed.');}finally{setBusy(false);}}}><ScanLine size={30}/><h1>CT Report Review</h1><p>Sign in to your review workspace.</p><label>Username<input autoComplete="username" required value={username} onChange={e=>setUsername(e.target.value)}/></label><label>Password<input type="password" autoComplete="current-password" required value={password} onChange={e=>setPassword(e.target.value)}/></label>{error&&<p className="error" role="alert">{error}</p>}<button className="button primary full" disabled={busy}>{busy?'Signing in…':'Sign in'}</button></form></main>;
+import {api, login, sessionToken, clearSession} from '../services/session';
+import {message} from '../utils';
+
+export interface Identity { username:string; role:'admin'|'doctor'; }
+async function currentIdentity():Promise<Identity> {
+  const session = await api('/session');
+  if (typeof session.username !== 'string' || !['admin','doctor'].includes(session.role)) {
+    throw new Error('This account has no assigned study role.');
+  }
+  return {username: session.username, role: session.role};
 }
 
+export function AuthGate({children}:{children:(user:Identity)=>ReactNode}) {
+  const {pathname} = useLocation();
+  const [user,setUser] = useState<Identity|null>(null);
+  const [checking,setChecking] = useState(true);
+  const [username,setUsername] = useState('');
+  const [password,setPassword] = useState('');
+  const [error,setError] = useState('');
+  const [busy,setBusy] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    function end() { setUser(null); setPassword(''); setError(''); }
+    window.addEventListener('ct-session-ended',end);
+    async function verify() {
+      const token = sessionToken();
+      if (!token) { setChecking(false); return; }
+      try {
+        const identity = await currentIdentity();
+        if (active && token === sessionToken()) setUser(identity);
+      } catch (e) {
+        if (active && token === sessionToken()) { setUser(null); setError(message(e)); }
+      } finally { if (active) setChecking(false); }
+    }
+    void verify();
+    const timer = window.setInterval(() => { if(sessionToken()) void verify(); },60000);
+    return () => { active=false; clearInterval(timer); window.removeEventListener('ct-session-ended',end); };
+  },[]);
+
+  async function signIn(event:FormEvent) {
+    event.preventDefault();
+    if (busy) return;
+    setBusy(true); setError('');
+    try {
+      await login(username,password);
+      setUser(await currentIdentity());
+    } catch(e) {
+      clearSession(); setError(message(e));
+    } finally { setPassword(''); setBusy(false); }
+  }
+  if(checking) return <main className="login-page" role="status">Checking session…</main>;
+  if(user) return children(user);
+  return <main className="login-page"><form className="form-card login-card" onSubmit={signIn}>
+    <ScanLine size={30}/><h1>{pathname.startsWith('/admin')?'Administrator sign-in':'CT Report Review'}</h1>
+    <p>Sign in with your assigned study account.</p>
+    <label>Username<input autoComplete="username" required value={username} onChange={e=>setUsername(e.target.value)}/></label>
+    <label>Password<input autoComplete="current-password" type="password" required value={password} onChange={e=>setPassword(e.target.value)}/></label>
+    {error && <p role="alert" className="error">{error}</p>}
+    <button className="button primary full" disabled={busy}>{busy?'Signing in…':'Sign in'}</button>
+  </form></main>;
+}

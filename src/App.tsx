@@ -1,39 +1,47 @@
-import {Expandable} from './components/Expandable';
-import {ReviewDecision} from './components/ReviewDecision';
-
-import {useState,useEffect,lazy,Suspense,useCallback,createContext,useContext} from 'react';
-import {HashRouter,Routes,Route,NavLink,Link,useParams} from 'react-router-dom';
-import {ScanLine,ArrowUpRight,Plus,RefreshCw,ChevronRight,Check,FileText,Download,ArrowLeft,ExternalLink,FolderOpen,Activity,PanelLeftClose} from 'lucide-react';
-import {repositoryUrl} from './config';
-import type {CaseRelease,GitHubReview} from './types';
-import {decisionLabels,ratings} from './types';
-import {listCases} from './services/github/releases';
-import {reviewsCSV,counts} from './services/github/issues';
-import {listReviews} from './services/reviews';
-import {AuthGate} from './components/AuthGate';
+import {lazy,Suspense} from 'react';
+import {HashRouter,Link,NavLink,Navigate,Route,Routes} from 'react-router-dom';
+import {ScanLine} from 'lucide-react';
+import {AuthGate, type Identity} from './components/AuthGate';
+import {BlindCase, StudyList} from './components/BlindCases';
 import {logout} from './services/session';
-import {saveFile,message,modelLabel} from './utils';
-import {Upload} from './components/Upload';
-import {ViewerBoundary} from './components/ViewerBoundary';
-import {Tabs,TabsList,TabsTrigger,TabsContent} from './components/Tabs';
-import {ResizablePanelGroup,ResizablePanel,ResizableHandle} from './components/Resizable';
-const Viewer=lazy(()=>import('./components/Viewer'));
-interface Data {cases:CaseRelease[];reviews:GitHubReview[];loading:boolean;error:string;warnings:string[];refresh:(type?:'cases'|'reviews')=>Promise<void>}
-const Context=createContext<Data>(null!);
-function DataProvider({children}:{children:React.ReactNode}){const [cases,setCases]=useState<CaseRelease[]>([]),[reviews,setReviews]=useState<GitHubReview[]>([]),[loading,setLoading]=useState(true),[error,setError]=useState(''),[warnings,setWarnings]=useState<string[]>([]);const refresh=useCallback(async(type?:'cases'|'reviews')=>{setLoading(true);setError('');try{const [c,r]=await Promise.all([listCases(type!=='reviews'),listReviews(type!=='cases')]);setCases(c.cases);setReviews(r.reviews);setWarnings([...c.warnings,...r.warnings]);}catch(e){setError(message(e));}finally{setLoading(false);}},[]);useEffect(()=>{void refresh();},[refresh]);return <Context.Provider value={{cases,reviews,loading,error,warnings,refresh}}>{children}</Context.Provider>;}
-function Banner(){const {error,warnings}=useContext(Context);return <>{error&&<div className="global-error" role="alert">{error}</div>}{!!warnings.length&&<details className="global-warning"><summary>{warnings.length} records need attention</summary>{warnings.map((w,i)=><p key={i}>{w}</p>)}</details>}</>;}
-function Header(){return <header className="header"><Link className="brand" to="/"><span className="brand-icon"><ScanLine size={22}/></span><div>CT Report Review<small>CLINICAL RESEARCH</small></div></Link><nav><NavLink to="/" end><ScanLine size={15}/>Home</NavLink><NavLink to="/cases"><FolderOpen size={15}/>Clinical Review</NavLink><NavLink to="/upload"><Plus size={15}/>Upload Case</NavLink><NavLink to="/results"><Activity size={15}/>Results</NavLink></nav><div className="header-end"><button className="button secondary" onClick={()=>void logout().catch(()=>{})}>Sign out</button></div></header>;}
-const forCase=(reviews:GitHubReview[],c:CaseRelease)=>reviews.filter(r=>r.case_id===c.case_id&&(!r.release_id||r.release_id===c.release_id));
-function Empty(){return <div className="empty"><div className="empty-icon"><ScanLine size={32}/></div><h2>Your review workspace is ready</h2><p>Published CT cases and their model reports will appear here.<br/>Prepare your first case and publish it to GitHub Releases.</p><Link className="button primary" to="/upload"><Plus size={16}/>Upload Case</Link><a href={`${repositoryUrl}/releases`} target="_blank" rel="noreferrer" className="text-button">View GitHub Releases <ArrowUpRight size={14}/></a></div>;}
-function CaseTable({compact=false}:{compact?:boolean}){const {cases,reviews,loading}=useContext(Context);if(loading&&!cases.length)return <div className="empty"><span className="spinner"/><p>Loading published cases…</p></div>;if(!cases.length)return <Empty/>;return <div className="table-scroll"><table><thead><tr><th>Case / study</th><th>Imaging</th><th>Reports</th><th>Date added</th><th>Review status</th><th/></tr></thead><tbody>{cases.slice(0,compact?5:undefined).map(c=>{const reviewed=new Set(forCase(reviews,c).filter(r=>c.reports.some(m=>m.id===r.report_id)).map(r=>r.report_id)).size;return <tr key={c.release_id}><td><Link className="case-title" to={`/review/${c.release_id}`}><span className="study-icon"><ScanLine size={19}/></span><span><strong>{c.case_name}</strong><small>{c.case_id}</small></span></Link></td><td><span className="format-badge">{c.imaging.type==='NIFTI'?'NIfTI':'DICOM'}</span></td><td>{c.reports.length} reports</td><td className="muted">{new Date(c.created_at).toLocaleDateString()}</td><td><div className="review-meter"><span>{reviewed} / {c.reports.length} reviewed</span><progress value={reviewed} max={c.reports.length}/></div></td><td><Link className="review-link" to={`/review/${c.release_id}`}>Review<ChevronRight size={15}/></Link></td></tr>;})}</tbody></table></div>;}
-function Home(){const {cases,reviews,loading,refresh}=useContext(Context);return <main className="page home-page"><div className="page-heading"><div><span className="eyebrow">CLINICAL EVALUATION WORKSPACE</span><h1>CT Report Review</h1><p>Clinical evaluation of AI-generated reports against CT imaging data</p></div><Link className="button primary" to="/upload"><Plus size={16}/>Upload Case</Link></div><div className="summary-strip"><div><ScanLine/><span>Published cases<strong>{cases.length}</strong></span></div><div><FileText/><span>Model reports<strong>{cases.reduce((n,c)=>n+c.reports.length,0)}</strong></span></div><div><Check/><span>Submitted reviews<strong>{reviews.length}</strong></span></div></div><section className="work-card"><div className="section-heading"><h2>Case workspace</h2><span className="muted">Published studies</span><button className="button secondary push-right" disabled={loading} onClick={()=>void refresh('cases')}><RefreshCw size={14} className={loading?'spin':''}/>Refresh Cases</button></div><CaseTable compact/></section><div className="home-bottom"><Link to="/cases"><ScanLine size={20}/><div><h3>Clinical Review</h3><p>Inspect the CT study and evaluate each model report.</p></div><ArrowUpRight size={20}/></Link><Link to="/results"><Activity size={20}/><div><h3>Review results</h3><p>Explore individual ratings and export reviewer feedback.</p></div><ArrowUpRight size={20}/></Link></div></main>;}
-function Cases(){const {loading,refresh,cases}=useContext(Context);return <main className="page"><div className="page-heading"><div><span className="eyebrow">CLINICAL REVIEW</span><h1>Case library <span className="heading-count">{cases.length}</span></h1><p>Open a study to load its CT and review the report.</p></div><div className="actions"><button className="button secondary" disabled={loading} onClick={()=>void refresh('cases')}><RefreshCw size={15}/>Refresh Cases</button><Link className="button primary" to="/upload"><Plus size={15}/>Upload Case</Link></div></div><div className="work-card"><CaseTable/></div></main>;}
-function ReportPanel({item}:{item:CaseRelease}){
- const {reviews,refresh}=useContext(Context);const [reviewsHidden,setReviewsHidden]=useState(false);const [textSize,setTextSize]=useState(14);const [selected,setSelected]=useState(item.reports[0].id);const report=item.reports.find(r=>r.id===selected)!;const related=forCase(reviews,item);const reviewed=new Set(related.map(r=>r.report_id)).size;
- return <Expandable title="Model reports"><aside className={`report-panel ${reviewsHidden?"reviews-hidden":""}`}><div className="panel-header"><div><FileText size={16}/><h2>Model reports</h2><button className="icon-button" aria-label="Decrease report text" onClick={()=>setTextSize(s=>Math.max(10,s-2))}>A−</button><button className="icon-button" aria-label="Increase report text" onClick={()=>setTextSize(s=>Math.min(32,s+2))}>A+</button></div><span>{reviewed} / {item.reports.length} reviewed</span></div><Tabs value={selected} onValueChange={setSelected} className="report-tabs"><TabsList aria-label="Model reports">{item.reports.map(r=><TabsTrigger value={r.id} key={r.id}>{modelLabel(r.model_name)} {item.reports.length>1?`· ${r.id}`:""}</TabsTrigger>)}</TabsList>{item.reports.map(r=><TabsContent key={r.id} value={r.id} className="report-content"><span className="eyebrow">AI-GENERATED REPORT</span><div className="report-title"><h3>{r.report_name}</h3><button className="icon-button" title="Download Report" aria-label={`Download ${modelLabel(r.model_name)} report`} onClick={()=>saveFile(r.report_text,`${item.case_id}-${r.id}.txt`)}><Download size={16}/></button></div><div className="report-text" style={{fontSize:textSize}}>{r.report_text.replace(/(?<!\n)\n(?!\n)/g," ")}</div></TabsContent>)}</Tabs>
- <button className="review-collapse" aria-expanded={!reviewsHidden} aria-controls="review-body" onClick={()=>setReviewsHidden(v=>!v)}>{reviewsHidden?"▲ Show reviews":"▼ Hide reviews"}</button><div id="review-body" className="review-body" hidden={reviewsHidden}><ReviewDecision key={item.release_id} item={item} report={report} reviews={related} refresh={()=>refresh('reviews')}/></div></aside></Expandable>;
-}
-function ReviewPage(){const {caseId}=useParams();const {cases,loading,reviews}=useContext(Context);const item=cases.find(c=>c.release_id===Number(caseId));if(!item)return <main className="page"><div className="empty"><ScanLine size={32}/><h2>{loading?'Loading case…':'Case not found'}</h2><Link to="/cases" className="button secondary">Back to cases</Link></div></main>;return <main className="review-page"><div className="review-topbar"><Link to="/cases" className="icon-button" aria-label="Back to cases"><ArrowLeft size={18}/></Link><span className="case-id">{item.case_id}</span><strong>{item.case_name}</strong><span className="format-badge">{item.imaging.type}</span><span className="muted push-right">{item.reports.length} model reports</span></div><ResizablePanelGroup direction="horizontal" className="review-layout"><ResizablePanel defaultSize={15} minSize={10} maxSize={24}><aside className="case-sidebar"><div className="panel-header"><h2>Cases <span>{cases.length}</span></h2><PanelLeftClose size={15}/></div>{cases.map(c=><Link key={c.release_id} to={`/review/${c.release_id}`} className={`case-item ${c.release_id===item.release_id?'active':''}`}><div><span className="mini-study"><ScanLine size={22}/></span><span><strong>{c.case_id}</strong><small>{c.imaging.type}</small></span><ChevronRight size={14}/></div><p>{c.case_name}</p><small>{new Set(forCase(reviews,c).map(r=>r.report_id)).size} / {c.reports.length} reviewed</small></Link>)}</aside></ResizablePanel><ResizableHandle/><ResizablePanel defaultSize={55} minSize={35}><ViewerBoundary key={item.release_id}><Suspense fallback={<div className="empty"><span className="spinner"/>Loading imaging engine…</div>}><Viewer key={item.release_id} item={item}/></Suspense></ViewerBoundary></ResizablePanel><ResizableHandle/><ResizablePanel defaultSize={30} minSize={23} maxSize={45}><ReportPanel key={item.release_id} item={item}/></ResizablePanel></ResizablePanelGroup></main>;}
-function Results(){const {reviews,cases,loading,refresh}=useContext(Context);const overall=counts(reviews);const names=new Map(cases.flatMap(c=>[[c.case_id,c.case_name],[String(c.release_id),c.case_name]]));const groups=new Map<string,GitHubReview[]>();reviews.forEach(r=>{const key=`${r.release_id}:${r.case_id}:${r.report_id}`;groups.set(key,[...(groups.get(key)||[]),r]);});return <main className="page"><div className="page-heading"><div><span className="eyebrow">REVIEW ANALYSIS</span><h1>Review results</h1><p>Findings quality ratings: 1 = Poor, 5 = Excellent. Legacy reviews retain their original labels and are excluded from rating counts.</p></div><div className="actions"><button className="button secondary" disabled={loading} onClick={()=>void refresh('reviews')}><RefreshCw size={15}/>Refresh Reviews</button><button className="button secondary" onClick={()=>saveFile(JSON.stringify(reviews,null,2),'reviews.json','application/json')}><Download size={15}/>JSON</button><button className="button primary" onClick={()=>saveFile(reviewsCSV(reviews,names),'reviews.csv','text/csv')}><Download size={15}/>CSV</button></div></div><div className="summary-strip results-counts"><div><FileText/><span>Submitted reviews<strong>{reviews.length}</strong></span></div>{ratings.map(value=><div key={value}><span>{decisionLabels[value]}<strong>{overall[value]}</strong></span></div>)}</div>{!reviews.length?<div className="work-card empty"><Activity size={30}/><h2>No reviews submitted yet</h2><p>Submitted reviews will appear here after you refresh.</p><Link className="button secondary" to="/cases">Open Clinical Review<ChevronRight size={15}/></Link></div>:[...groups].map(([key,rs])=>{const c=counts(rs);return <section className="work-card results-group" key={key}><div className="section-heading"><span className="case-id">{rs[0].case_id}</span><h2>{modelLabel(rs[0].model_name)}</h2><span className="muted">{rs[0].report_id}</span><div className="actions push-right">{ratings.map(value=><span key={value} className="badge">{value}: {c[value]}</span>)}</div></div><div className="table-scroll"><table><thead><tr><th>Reviewer</th><th>Findings quality</th><th>Comment</th><th>Submitted</th><th>Submission</th></tr></thead><tbody>{rs.map(r=><tr key={r.github_issue_number}><td>{r.reviewer}</td><td><span className={`badge ${r.decision}`}>{decisionLabels[r.decision]}</span></td><td className="comment-cell">{r.comment||'—'}</td><td>{new Date(r.created_at).toLocaleDateString()}</td><td><span>{r.submission_id.slice(0,8)}</span></td></tr>)}</tbody></table></div></section>;})}</main>;}
-export default function App(){return <HashRouter><AuthGate><DataProvider><Header/><Banner/><Routes><Route path="/" element={<Home/>}/><Route path="/cases" element={<Cases/>}/><Route path="/upload" element={<Upload/>}/><Route path="/review/:caseId" element={<ReviewPage/>}/><Route path="/results" element={<Results/>}/><Route path="*" element={<Home/>}/></Routes></DataProvider></AuthGate></HashRouter>;}
 
+const AdminResults=lazy(()=>import('./components/AdminResults'));
+const AdminUpload=lazy(()=>import('./components/AdminUpload'));
+const AdminCaseEditor=lazy(()=>import('./components/AdminCaseEditor'));
+const DoctorAccounts=lazy(()=>import('./components/DoctorAccounts'));
+const LegacyWorkspace=lazy(()=>import('./LegacyWorkspace'));
+
+function Workspace({user}:{user:Identity}) {
+  const isAdmin=user.role==='admin';
+  const home=isAdmin?'/admin':'/doctor';
+  return <>
+    <header className="header blind-header">
+      <Link className="brand" to={home}><span className="brand-icon"><ScanLine size={22}/></span>CT Report Review</Link>
+      <nav aria-label="Study">
+        <NavLink to={home} end>{isAdmin?'Cases':'Assigned cases'}</NavLink>
+        {isAdmin&&<NavLink to="/admin/upload">Upload study</NavLink>}
+        {isAdmin&&<NavLink to="/admin/readers">Readers</NavLink>}
+        {isAdmin&&<NavLink to="/admin/results">Results</NavLink>}
+        {isAdmin&&<NavLink to="/admin/archive">Previous reviews</NavLink>}
+      </nav>
+      <div className="header-end"><span>{user.username}</span><button className="button secondary" onClick={()=>void logout().catch(()=>{})}>Sign out</button></div>
+    </header>
+    <Suspense fallback={<p className="page" role="status">Loading…</p>}>
+      <Routes>
+        <Route path={home} element={<StudyList role={user.role}/>}/>
+        <Route path={home+'/cases/:caseId'} element={<BlindCase role={user.role}/>}/>
+        {isAdmin&&<Route path="/admin/upload" element={<AdminUpload/>}/>}
+        {isAdmin&&<Route path="/admin/readers" element={<DoctorAccounts/>}/>}
+        {isAdmin&&<Route path="/admin/cases/:caseId/edit" element={<AdminCaseEditor/>}/>}
+        {isAdmin&&<Route path="/admin/results" element={<AdminResults/>}/>}
+        {isAdmin&&<Route path="/admin/archive" element={<LegacyWorkspace/>}/>}
+        {isAdmin&&<Route path="/results" element={<Navigate to="/admin/archive" replace/>}/>}
+        <Route path="*" element={<Navigate to={home} replace/>}/>
+      </Routes>
+    </Suspense>
+  </>;
+}
+
+export default function App(){
+  return <HashRouter><AuthGate>{user=><Workspace key={user.role+':'+user.username} user={user}/>}</AuthGate></HashRouter>;
+}

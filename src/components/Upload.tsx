@@ -1,13 +1,12 @@
 import {DriveUpload} from './DriveUpload';
 import {useState,type ChangeEvent} from 'react';
 import {UploadCloud,Plus,Trash2,ArrowUpRight,Download,Check,FileArchive} from 'lucide-react';
-import {zip,unzip,gunzip} from 'fflate';
+import {zip} from 'fflate';
 import {repositoryUrl} from '../config';
 import type {Case,ModelReport} from '../types';
 import {guardSize,ASSET_LIMIT} from '../services/github/releaseAssets';
 import {saveFile,sizeLabel,message} from '../utils';
-export const unzipFiles=(bytes:Uint8Array)=>new Promise<Record<string,Uint8Array>>((resolve,reject)=>unzip(bytes,{filter:f=>{if(f.originalSize>=ASSET_LIMIT)throw new Error('Expanded DICOM file exceeds 2 GiB.');return true;}},(e,d)=>e?reject(e):resolve(d)));
-export const gunzipBytes=(bytes:Uint8Array)=>new Promise<Uint8Array<ArrayBuffer>>((resolve,reject)=>gunzip(bytes,(e,d)=>e?reject(e):resolve(new Uint8Array(d))));
+import {unzipFiles,gunzipBytes} from '../services/volumeArchive';
 const newReport=():ModelReport=>({id:`report-${crypto.randomUUID().slice(0,8)}`,model_name:'',report_name:'',report_text:''});
 export function Upload(){
  const [destination,setDestination]=useState<'drive'|'github'>('drive');
