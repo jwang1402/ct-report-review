@@ -6,6 +6,7 @@ import {api,ResponseError} from '../services/session';
 import {message} from '../utils';
 import {decisionLabels,ratings} from '../types';
 import {ViewerBoundary} from './ViewerBoundary';
+import DriveCaseViewer from './DriveCaseViewer';
 import {Tabs,TabsContent,TabsList,TabsTrigger} from './Tabs';
 import type {Identity} from './AuthGate';
 const Viewer=lazy(()=>import('./Viewer'));
@@ -102,9 +103,9 @@ export function BlindCase({role}:{role:Identity['role']}) {
       {role==='admin'&&<Link className="button secondary" to={'/admin/cases/'+encodeURIComponent(caseId)+'/edit'}>Edit case</Link>}
     </div>
     <div className="blind-split">
-      <ViewerBoundary key={data.case_id}><Suspense fallback={<p role="status">Loading imaging engine…</p>}>
+      {data.imaging.drive_url?<DriveCaseViewer key={data.case_id} study={data}/>:<ViewerBoundary key={data.case_id}><Suspense fallback={<p role="status">Loading imaging engine…</p>}>
         <Viewer key={data.case_id} privateCase item={{case_id:data.case_id,imaging:data.imaging,asset:{size:data.imaging.size,url:''}}}/>
-      </Suspense></ViewerBoundary>
+      </Suspense></ViewerBoundary>}
       {role==='doctor'?<DoctorReports key={caseId} id={caseId} reports={doctorReports} revision={data.revision??'initial'} reload={refresh}/>:<AdminReports key={caseId} reports={adminReports}/>}
     </div>
   </main>;

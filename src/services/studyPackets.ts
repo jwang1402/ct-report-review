@@ -1,6 +1,5 @@
 import { BlobReader, BlobWriter, ZipReader, type FileEntry } from '@zip.js/zip.js';
-import { sha256 } from '@noble/hashes/sha2.js';
-import { bytesToHex } from '@noble/hashes/utils.js';
+import {hashBlob} from './fileHash';
 
 type Letter = 'A' | 'B' | 'C' | 'D';
 export interface PacketCase {
@@ -23,29 +22,12 @@ export interface StudyPacketFiles {
 
 const letters: Letter[] = ['A', 'B', 'C', 'D'];
 const maxTextBytes = 2 * 1024 * 1024;
-const readSize = 8 * 1024 * 1024;
 const caseIdPattern = /^Case[0-9]{2,4}$/;
 const shaPattern = /^[0-9a-f]{64}$/;
 const opts = {useWebWorkers: false, checkSignature: true};
 
 function requireThat(ok: unknown, error: string): asserts ok {
   if (!ok) throw new Error(error);
-}
-
-async function hashBlob(blob: Blob, signal?: AbortSignal, progress?: (percent: number) => void, partHashes?: string[]) {
-  const hash = sha256.create();
-  let lastPercent = -1;
-  for (let start = 0; start < blob.size; start += readSize) {
-    signal?.throwIfAborted();
-    const end = Math.min(start + readSize, blob.size);
-    const chunk = await blob.slice(start, end).arrayBuffer();
-    hash.update(new Uint8Array(chunk));
-    if (partHashes) partHashes.push(bytesToHex(new Uint8Array(await crypto.subtle.digest('SHA-256', chunk))));
-    const percent = Math.floor(100 * end / blob.size);
-    if (percent !== lastPercent) progress?.(percent);
-    lastPercent = percent;
-  }
-  return bytesToHex(hash.digest());
 }
 
 async function filesIn(reader: ZipReader<Blob>, signal?: AbortSignal) {

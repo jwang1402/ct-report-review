@@ -8,12 +8,6 @@
       "0 0 * * *"
     ]
   },
-  "r2_buckets": [
-    {
-      "binding": "IMAGES",
-      "bucket_name": "ct-report-review-private-images"
-    }
-  ],
   "d1_databases": [
     {
       "binding": "DB",

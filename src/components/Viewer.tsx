@@ -17,7 +17,7 @@ const presets:Record<string,[number,number]>={'Soft Tissue':[400,40],Lung:[1500,
 const axes=[cs.Enums.OrientationAxis.AXIAL,cs.Enums.OrientationAxis.SAGITTAL,cs.Enums.OrientationAxis.CORONAL];
 const axisNames=['Axial','Sagittal','Coronal'];
 export interface ViewerStudy { case_id:string; imaging:Pick<ImagingAsset,'type'|'filename'>; asset:Pick<ReleaseAsset,'size'|'url'|'sha256'>; }
-export default function Viewer({item,privateCase=false}:{item:ViewerStudy;privateCase?:boolean}){
+export default function Viewer({item,privateCase=false,verifiedFile}:{item:ViewerStudy;privateCase?:boolean;verifiedFile?:File}){
  const elements=useRef<(HTMLDivElement|null)[]>([]);const engineRef=useRef<cs.RenderingEngine|null>(null);const groupRef=useRef<ReturnType<typeof tools.ToolGroupManager.createToolGroup>>(undefined);
  const [status,setStatus]=useState('Downloading imaging dataset'),[error,setError]=useState(''),[progress,setProgress]=useState(0),[ready,setReady]=useState(false);
  const [series,setSeries]=useState<Series[]>([]),[selected,setSelected]=useState(''),[blob,setBlob]=useState<Blob|null>(null);
@@ -26,13 +26,13 @@ export default function Viewer({item,privateCase=false}:{item:ViewerStudy;privat
  const [focus,setFocus]=useState<number|null>(null);
  const [retry,setRetry]=useState(0),[localFile,setLocalFile]=useState<File|null>(null);
  useEffect(()=>{const controller=new AbortController();setReady(false);setError('');setBlob(null);setSeries([]);setSelected('');
-  (async()=>{try{setStatus(localFile?'Opening selected original CT…':'Downloading imaging dataset');if(localFile&&(localFile.size!==item.asset.size||localFile.name!==item.imaging.filename))throw new Error('Select the original file named '+item.imaging.filename+' ('+sizeLabel(item.asset.size)+').');const data=localFile??await downloadAsset(item.asset,(n,t)=>{setProgress(n/t);setStatus(`Downloading imaging dataset · ${sizeLabel(n)} / ${sizeLabel(t)}`);},controller.signal,privateCase?item.case_id:undefined);if(controller.signal.aborted)return;
+  (async()=>{try{setStatus(verifiedFile||localFile?'Opening selected original CT…':'Downloading imaging dataset');if(localFile&&(localFile.size!==item.asset.size||localFile.name!==item.imaging.filename))throw new Error('Select the original file named '+item.imaging.filename+' ('+sizeLabel(item.asset.size)+').');const data=verifiedFile??localFile??await downloadAsset(item.asset,(n,t)=>{setProgress(n/t);setStatus(`Downloading imaging dataset · ${sizeLabel(n)} / ${sizeLabel(t)}`);},controller.signal,privateCase?item.case_id:undefined);if(controller.signal.aborted)return;
    if(item.imaging.type==='NIFTI'){setBlob(data);return;}
    setStatus('Preparing DICOM series');const entries=await unzipFiles(new Uint8Array(await data.arrayBuffer()));const groups=new Map<string,Series>();let ignored=0,total=0;
    for(const [name,bytes] of Object.entries(entries)){if(name.endsWith('/')||name.includes('__MACOSX/')||name.split('/').pop()?.startsWith('.'))continue;total+=bytes.length;if(total>=2*1024**3)throw new Error('Expanded DICOM dataset exceeds the prototype 2 GiB memory limit.');try{const ds=dicomParser.parseDicom(bytes,{untilTag:'x7fe00010'});const uid=ds.string('x0020000e');if(!uid||!ds.uint16('x00280010')||!ds.uint16('x00280011')){ignored++;continue;}const count=Number(ds.string('x00280008')||1);const group=groups.get(uid)||{uid,label:ds.string('x0008103e')||'DICOM series',files:[],frames:0};group.files.push(new File([new Uint8Array(bytes)],name.split('/').pop()||'slice.dcm'));group.frames+=count;groups.set(uid,group);}catch{ignored++;}}
    const all=[...groups.values()].sort((a,b)=>b.frames-a.frames);if(!all.length)throw new Error('No readable DICOM image series found in this ZIP.');if(controller.signal.aborted)return;setSeries(all);setSelected(all[0].uid);setStatus(`${all.length} series found${ignored?` · ${ignored} non-image files skipped`:''}`);
   }catch(e){if(!controller.signal.aborted)setError(message(e));}})();return()=>controller.abort();
- },[item.case_id,item.asset.size,item.asset.url,item.asset.sha256,privateCase,retry,localFile]);
+ },[item.case_id,item.asset.size,item.asset.url,item.asset.sha256,privateCase,verifiedFile,retry,localFile]);
  useEffect(()=>{const picked=series.find(s=>s.uid===selected);if(!blob&&!picked)return;
   let closed=false,engine:cs.RenderingEngine|undefined,url:string|undefined,volumeId:string|undefined;const imageIds:string[]=[];const registeredFiles:number[]=[];const id=crypto.randomUUID();const viewIds=axes.map((_,i)=>`${id}-${i}`);const observers:ResizeObserver[]=[];const listeners:Array<()=>void>=[];
   setReady(false);setError('');

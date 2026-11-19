@@ -23,6 +23,12 @@ export function selectDriveFolder(){return new Promise<{id:string;name:string}>(
 async function request(url:string,init:RequestInit={}){return fetch(url,{...init,credentials:'omit',headers:{...init.headers,Authorization:'Bearer '+access()}});}
 async function checked(r:Response){if(!r.ok){if(r.status===401)throw new Error('Google authorization expired. Reconnect and resume.');throw new Error(`Drive request failed (${r.status}). Check folder access and available storage, then retry.`);}return r;}
 export async function verifyFolder(id:string){const r=await checked(await request(`https://www.googleapis.com/drive/v3/files/${id}?fields=id,name,mimeType,capabilities(canAddChildren)&supportsAllDrives=true`));const f=await r.json();if(f.mimeType!=='application/vnd.google-apps.folder'||!f.capabilities?.canAddChildren)throw new Error('The selected folder does not allow uploads.');return f;}
+export async function readDriveMetadata<T>(path:string,params:Record<string,string>,signal:AbortSignal):Promise<T>{
+ if(!/^files(?:\/[A-Za-z0-9_-]+(?:\/permissions)?)?$/.test(path))throw new Error('Invalid Drive metadata path.');
+ const url=new URL('https://www.googleapis.com/drive/v3/'+path);
+ url.search=new URLSearchParams({...params,supportsAllDrives:'true'}).toString();
+ return (await checked(await request(url.href,{signal}))).json();
+}
 export interface UploadSession {url?:string;offset:number;fileId?:string}
 export function acknowledgedOffset(range:string|null,total:number){if(!range)return 0;const m=/^bytes=0-(\d+)$/.exec(range);if(!m)throw new Error('Invalid Drive upload acknowledgement');const offset=Number(m[1])+1;if(offset>total)throw new Error('Invalid upload offset');return offset;}
 export async function uploadDriveBlob(blob:Blob,name:string,folder:string,session:UploadSession,progress:(n:number)=>void,signal:AbortSignal){

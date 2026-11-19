@@ -4,11 +4,11 @@ Two workspaces share the same CT viewer. Each doctor signs in to `#/doctor` with
 
 ## Prepare the study
 
-Follow [四模型盲审部署与病例导入](docs/BLIND_STUDY.md) to set up D1 and private R2 and create the first administrator. In the administrator workspace, use **Upload study** to verify the three study archives, upload scans and publish the reports. **Readers** manages individual accounts and study assignments. All readers follow the same case order and see the same four reports under the same A–D labels for each case. Administrators can edit a case before its first rating.
+Follow [四模型盲审部署与病例导入](docs/BLIND_STUDY.md) to set up D1 and create the first administrator. Upload the anonymized NIfTI files to a restricted Google Drive folder and grant the participating doctors viewer access. On **Upload study**, verify the study archives, match each case to its Drive file and publish the reports. **Readers** manages individual accounts and study assignments. All readers see the same cases and A–D reports. Administrators can edit a case before its first rating.
 
 ## Application
 
-GitHub Pages serves the React application. A Cloudflare Worker authenticates each request, streams assigned scans from R2, and reads and writes ratings in D1. The authenticated doctor response contains anonymous reports and that doctor's own ratings. Use the coordinator workspace for unblinding.
+GitHub Pages serves the React application. The Cloudflare Worker stores assignments, file references and ratings in D1. Drive controls access to the image files. The doctor workspace provides the assigned file link, anonymous reports and that doctor's own ratings. Coordinators can unblind the results. Sites with an existing private R2 binding can also serve scans from that bucket.
 
 ## Develop and verify
 

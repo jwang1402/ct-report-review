@@ -29,10 +29,31 @@ function validateReports(reports) {
 
 const displayNames = new Map(Object.entries({morph:'MORPH-CT',m3d:'M3D-LaMed-Phi-3-4B',btb:'BTB3D-16',ctchat:'CT-CHAT-8B'}));
 
-function normalize(data) {
+function driveFileReference(value) {
+  const invalid='Use the Google Drive sharing link for an individual file.';
+  check(validString(value,2048),400,invalid);
+  let url;
+  try { url=new URL(value); } catch { throw new StudyError(400,invalid); }
+  check(url.origin==='https://drive.google.com' && !url.username && !url.password,400,invalid);
+  const filePath=/^\/file\/d\/([A-Za-z0-9_-]{10,200})(?:\/view)?\/?$/.exec(url.pathname);
+  const id=filePath?.[1] ?? (url.pathname==='/open' && url.searchParams.getAll('id').length===1 ? url.searchParams.get('id') : '');
+  check(/^[A-Za-z0-9_-]{10,200}$/.test(id),400,invalid);
+  const keys=url.searchParams.getAll('resourcekey');
+  check(!keys.length || (keys.length===1 && /^[A-Za-z0-9_-]{1,200}$/.test(keys[0])),400,invalid);
+  return {id, reference:id+(keys.length?'?resourcekey='+keys[0]:'')};
+}
+
+export function driveImage(key) {
+  const match=/^blind\/[A-Za-z0-9_-]+\/Case\d+\/drive\/([a-f0-9]{64})\/([A-Za-z0-9_-]{10,200})(\?resourcekey=[A-Za-z0-9_-]{1,200})?$/.exec(key);
+  if (!match) return null;
+  return {sha256:match[1],drive_url:'https://drive.google.com/file/d/'+match[2]+'/view'+(match[3]??'')};
+}
+
+function normalize(data,drive) {
   check(typeof data.prefix==='string' && prefixPattern.test(data.prefix),400,'Invalid study prefix.');
   check(Array.isArray(data.cases) && data.cases.length>0 && data.cases.length<=100,400,'Provide between 1 and 100 cases.');
   const ids = new Set();
+  const linkedFiles = new Set();
   let modelSet;
   const cases = data.cases.map(c=>{
     check(c && typeof c.case_id==='string' && aliasPattern.test(c.case_id) && validString(c.case_name,120) && !ids.has(c.case_id),
@@ -45,6 +66,12 @@ function normalize(data) {
     modelSet=names;
     ids.add(c.case_id);
     const row={case_id:c.case_id,case_name:c.case_name.trim(),size:c.size,sha256:c.sha256,reports};
+    if (drive) {
+      const file=driveFileReference(c.drive_url);
+      check(!linkedFiles.has(file.id),400,'Each case must link to a different CT file.');
+      linkedFiles.add(file.id);
+      row.drive_ref=file.reference;
+    }
     if (c.part_sha256!==undefined) {
       check(Array.isArray(c.part_sha256) && c.part_sha256.length===chunks(c) &&
         c.part_sha256.every(h=>typeof h==='string' && /^[a-f0-9]{64}$/.test(h)),400,'Invalid image part checksums.');
@@ -53,7 +80,7 @@ function normalize(data) {
     }
     return row;
   });
-  return {prefix:data.prefix,cases};
+  return {prefix:data.prefix,cases,...(drive && {provider:'drive'})};
 }
 
 const imageKey=(batch,c)=>'blind/'+batch.prefix+'/'+c.case_id+'/web-'+batch.batch_id+'/'+c.sha256+'.nii.gz';
@@ -63,8 +90,7 @@ const dbrow=(db,sql,...args)=>db.prepare(sql).bind(...args).first();
 const all=async(db,sql,...args)=>(await db.prepare(sql).bind(...args).all()).results;
 const write=(db,sql,...args)=>db.prepare(sql).bind(...args).run();
 
-async function createBatch(db,data) {
-  const manifest=normalize(data);
+async function createBatch(db,manifest) {
   const json=JSON.stringify(manifest);
   const id=crypto.randomUUID();
   const existing = await dbrow(db,'SELECT * FROM web_batches WHERE prefix=?',manifest.prefix);
@@ -74,12 +100,14 @@ async function createBatch(db,data) {
     await db.batch([
       db.prepare('INSERT INTO web_batches(batch_id,prefix,manifest) VALUES (?,?,?) ON CONFLICT(prefix) DO NOTHING')
         .bind(id,manifest.prefix,json),
-      db.prepare("INSERT INTO web_uploads(batch_id,case_id) SELECT batch_id,c.value->>'case_id' FROM web_batches,json_each(manifest,'$.cases') c WHERE batch_id=?").bind(id)
+      ...(manifest.provider==='drive' ? [] : [
+        db.prepare("INSERT INTO web_uploads(batch_id,case_id) SELECT batch_id,c.value->>'case_id' FROM web_batches,json_each(manifest,'$.cases') c WHERE batch_id=?").bind(id)
+      ])
     ]);
   }
   const row=existing || await dbrow(db,'SELECT * FROM web_batches WHERE prefix=?',manifest.prefix);
   check(row?.manifest===json,409,'This prefix already has a different packet. Use the original packet to resume, or choose a new prefix.');
-  return status(db,row);
+  return row;
 }
 
 async function status(db,batch) {
@@ -209,13 +237,17 @@ async function completeImage(db,bucket,batch,c) {
   return {ok:true};
 }
 
-async function publish(db,batch,data) {
-  const users=data.doctors;
+async function checkReaders(db,users) {
   check(Array.isArray(users) && users.length<=500 && users.every(u=>typeof u==='string' && /^[a-z0-9][a-z0-9_-]{0,39}$/.test(u))
     && new Set(users).size===users.length,400,'Choose valid, distinct doctor accounts.');
   const usersJson=JSON.stringify(users);
   const listed=await dbrow(db,"SELECT COUNT(*) AS n FROM accounts WHERE role='doctor' AND username IN (SELECT value FROM json_each(?))",usersJson);
   check(listed.n===users.length,400,'One or more selected doctor accounts are unavailable.');
+  return users;
+}
+
+async function publish(db,batch,users) {
+  const usersJson=JSON.stringify(users);
   const missing=await dbrow(db,'SELECT COUNT(*) AS n FROM web_uploads WHERE batch_id=? AND ready=0',batch.batch_id);
   check(!missing.n,409,'Complete and verify all images before publishing.');
   const occupied=await dbrow(db,`SELECT 1 FROM web_batches WHERE batch_id=? AND state='draft'
@@ -225,7 +257,9 @@ async function publish(db,batch,data) {
   const src=" FROM web_batches b, json_each(b.manifest,'$.cases') c";
   const reports=src+", json_each(c.value,'$.reports') r";
   const guard=" WHERE b.batch_id=? AND b.state='draft'";
-  const key="('blind/'||b.prefix||'/'||(c.value->>'case_id')||'/web-'||b.batch_id||'/'||(c.value->>'sha256')||'.nii.gz')";
+  const key=JSON.parse(batch.manifest).provider==='drive'
+    ? "('blind/'||b.prefix||'/'||(c.value->>'case_id')||'/drive/'||(c.value->>'sha256')||'/'||(c.value->>'drive_ref'))"
+    : "('blind/'||b.prefix||'/'||(c.value->>'case_id')||'/web-'||b.batch_id||'/'||(c.value->>'sha256')||'.nii.gz')";
   const sql=[
     'INSERT INTO private_cases(case_id,case_name,image_key,image_filename,image_size) SELECT '+caseId+
       ",c.value->>'case_name',"+key+",(c.value->>'case_id')||'.nii.gz',c.value->>'size'"+src+guard,
@@ -292,14 +326,29 @@ export async function adminStudy(path,request,env,jsonBody) {
   const edit=/^\/admin\/cases\/([A-Za-z0-9_-]{1,100})\/editor$/.exec(path);
   if (edit && method==='GET') return editor(db,edit[1]);
   if (edit && method==='POST') return saveEdit(db,edit[1],await jsonBody(request,1024*1024));
-  if (path==='/admin/batches' && method==='POST') return createBatch(db,await jsonBody(request,1024*1024));
+  if (path==='/admin/drive-studies' && method==='POST') {
+    const data=await jsonBody(request,1024*1024);
+    const manifest=normalize(data,true);
+    const readers=await checkReaders(db,data.doctors);
+    const batch=await createBatch(db,manifest);
+    await publish(db,batch,readers);
+    return {ok:true,state:'published',existing:batch.state==='published'};
+  }
+  if (path==='/admin/batches' && method==='POST') {
+    const batch=await createBatch(db,normalize(await jsonBody(request,1024*1024),false));
+    return status(db,batch);
+  }
   const match=/^\/admin\/batches\/([a-f0-9-]{36})(?:\/(publish)|\/images\/(Case[0-9]{2,4})\/(complete|parts\/([1-9][0-9]{0,4})))?$/.exec(path);
   if (!match) return null;
   const [,id,publishing,alias,action,part]=match;
   const batch=await dbrow(db,'SELECT * FROM web_batches WHERE batch_id=?',id);
   check(batch,404,'Unknown study batch.');
+  check(JSON.parse(batch.manifest).provider!=='drive',409,'Use the Drive study endpoint for linked images.');
   if (!publishing && !alias && method==='GET') return status(db,batch);
-  if (publishing && method==='POST') return publish(db,batch,await jsonBody(request));
+  if (publishing && method==='POST') {
+    const data=await jsonBody(request);
+    return publish(db,batch,await checkReaders(db,data.doctors));
+  }
   if (alias) {
     const c=JSON.parse(batch.manifest).cases.find(item=>item.case_id===alias);
     check(c,404,'Unknown image in this batch.');

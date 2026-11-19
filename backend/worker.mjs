@@ -1,4 +1,4 @@
-import {adminStudy,StudyError} from './admin-study.mjs';
+import {adminStudy,driveImage,StudyError} from './admin-study.mjs';
 import {manageReaders} from './admin-doctor.mjs';
 const origins = new Set(['https://jwang1402.github.io', 'http://127.0.0.1:5173', 'http://localhost:5173']);
 const encoder = new TextEncoder();
@@ -138,7 +138,8 @@ async function caseDetails(db, user, row) {
   const {results} = await query.all();
   return {
     case_id: row.case_id, case_name: doctor ? row.case_id : row.case_name,
-    imaging: {type: 'NIFTI', filename: row.case_id + (row.image_filename.endsWith('.gz') ? '.nii.gz' : '.nii'), size: row.image_size},
+    imaging: {type: 'NIFTI', filename: row.case_id + (row.image_filename.endsWith('.gz') ? '.nii.gz' : '.nii'), size: row.image_size,
+      ...driveImage(row.image_key)},
     reports: doctor ? results.map(({revision,...report})=>report) : results,
     ...(doctor && {revision:results[0]?.revision ?? 'initial'})
   };
@@ -187,6 +188,7 @@ function byteRange(header, size) {
 }
 
 async function imageResponse(request, bucket, row, headers) {
+  if (driveImage(row.image_key)) throw new HttpError(409,'Open the authorized Google Drive link to download this image.');
   if (!bucket) throw new HttpError(503, 'Private image storage is unavailable.');
   const output = new Headers(headers);
   output.set('Content-Type', 'application/octet-stream');

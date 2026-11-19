@@ -249,7 +249,6 @@ def apply_sql(db, sql, scratch, remote):
 def run(args, scratch):
     config = json.loads(CONFIG.read_text(encoding="utf-8"))
     db = next(d["database_name"] for d in config["d1_databases"] if d["binding"] == "DB")
-    bucket = next(b["bucket_name"] for b in config["r2_buckets"] if b["binding"] == "IMAGES")
     if args.command == "user":
         username = login_name(args.username)
         require(sys.stdin.isatty(), "Enter the new password in an interactive terminal.")
@@ -281,6 +280,8 @@ def run(args, scratch):
     print(f"Verified {len(objects)} images, {len(reports)} bilingual model reports, {len(plan)} shared letter assignments; {len(users)} selected doctors.")
     if args.command == "check":
         return
+    bucket = next((b["bucket_name"] for b in config.get("r2_buckets", []) if b["binding"] == "IMAGES"), None)
+    require(bucket, "This CLI import needs an IMAGES bucket. For a Google Drive study, publish from the administrator's Upload study page.")
     # Confirm accounts before uploading image objects. All public access must be disabled on this bucket.
     check_doctors(db, users, args.remote)
     saved_plan = shared_plan(db, args.prefix, args.remote)

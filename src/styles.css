@@ -100,6 +100,9 @@ input:not([type=checkbox]):not([type=range]),textarea,select{background:#fff;col
 .packet-files input { width: 100%; min-width: 0; }
 .study-panel details { margin-top: 18px; }
 .study-panel summary { cursor: pointer; color: #204e81; font-weight: 600; }
+.drive-file-links {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,17rem),1fr));gap:12px 18px;}
+.drive-file-links input,.study-panel details textarea {width:100%;min-width:0;}
+.drive-case-viewer {min-width:0;}
 .study-panel details table { margin-top: 12px; }
 .study-panel .reader-checks { display: flex; flex-wrap: wrap; gap: 12px 20px; }
 .study-panel .reader-checks label { display: inline-flex; align-items: center; gap: 8px; }

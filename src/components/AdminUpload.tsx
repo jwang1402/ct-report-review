@@ -4,6 +4,10 @@ import {parseStudyPackets,type StudyPackets} from '../services/studyPackets';
 import {uploadStudy,type UploadProgress} from '../services/studyUpload';
 import {useStudyData} from '../services/blindStudy';
 import {message,sizeLabel} from '../utils';
+import {api} from '../services/session';
+import {validateDriveLinks} from '../services/restrictedDrive';
+import DriveLinks from './DriveLinks';
+import DriveFolderUpload from './DriveFolderUpload';
 
 const inputs=[
   {key:'images',label:'CT volumes',filename:'Reader_Images.zip'},
@@ -14,6 +18,9 @@ type Files=Partial<Record<typeof inputs[number]['key'],File>>;
 
 export default function AdminUpload() {
   const [files,setFiles]=useState<Files>({});
+  const [source,setSource]=useState<'drive'|'r2'>('drive');
+  const [links,setLinks]=useState<Record<string,string>>({});
+  const [driveBusy,setDriveBusy]=useState(false);
   const [prefix,setPrefix]=useState('BR4shared');
   const [packets,setPackets]=useState<StudyPackets|null>(null);
   const [busy,setBusy]=useState<'verify'|'upload'|null>(null);
@@ -27,11 +34,11 @@ export default function AdminUpload() {
   const operation=useRef<AbortController|null>(null);
   useEffect(()=>()=>operation.current?.abort(),[]);
   useEffect(()=>{
-    if(!busy) return;
+    if(!busy&&!driveBusy) return;
     function warn(e:BeforeUnloadEvent){e.preventDefault();e.returnValue='';}
     window.addEventListener('beforeunload',warn);
     return ()=>window.removeEventListener('beforeunload',warn);
-  },[busy]);
+  },[busy,driveBusy]);
   const volumeBytes=packets?.cases.reduce((sum,c)=>sum+c.size,0)??0;
   async function verify() {
     const {images,reader,coordinator}=files;
@@ -48,12 +55,20 @@ export default function AdminUpload() {
     } finally {operation.current=null;setBusy(null);}
   }
   async function publish() {
-    if(!packets||operation.current||done||!storage.data?.ready)return;
+    if(!packets||operation.current||driveBusy||done||(source==='r2'&&!storage.data?.ready))return;
     const controller=new AbortController();
     operation.current=controller;
-    setError('');setBusy('upload');setProgress({bytes:0,message:'Opening upload session…'});
+    setError('');setBusy('upload');
     try {
-      setDone(await uploadStudy(packets,prefix,doctors,controller.signal,setProgress));
+      if(source==='drive'){
+        validateDriveLinks(packets.cases.map(c=>c.case_id),links);
+        await api('/admin/drive-studies',{method:'POST',signal:controller.signal,
+          body:JSON.stringify({prefix,doctors,cases:packets.cases.map(c=>({...c,drive_url:links[c.case_id].trim()}))})});
+        setDone('published');
+      } else {
+        setProgress({bytes:0,message:'Opening upload session…'});
+        setDone(await uploadStudy(packets,prefix,doctors,controller.signal,setProgress));
+      }
     } catch(e) {
       if(controller.signal.aborted)setPhase('Upload paused. Resume with the same study files.');
       else setError(message(e));
@@ -66,15 +81,21 @@ export default function AdminUpload() {
   </main>;
   return <main className="page study-upload">
     <div className="page-heading"><div><h1>Upload study</h1><p>Import the CT volumes and four anonymous reports per case.</p></div></div>
-    {storage.error?<p className="error" role="alert">Storage check failed. {storage.error} <button className="button secondary" onClick={storage.refresh}>Retry</button></p>
+    <section className="work-card study-panel"><label>CT storage
+      <select value={source} disabled={!!busy||driveBusy} onChange={e=>{setSource(e.target.value as 'drive'|'r2');setProgress(null);setError('');setPhase('');}}>
+        <option value="drive">Restricted Google Drive</option><option value="r2">Cloudflare R2</option>
+      </select></label>
+      {source==='drive'&&<p>The browser checks the three ZIP files on this computer. The website stores reports and Drive links. CT files stay in your Drive.</p>}
+    </section>
+    {source==='r2'&&(storage.error?<p className="error" role="alert">Storage check failed. {storage.error} <button className="button secondary" onClick={storage.refresh}>Retry</button></p>
       :storage.data?.ready===false?<p className="study-storage-status" role="status">Activate private CT storage to publish. You can verify the files on this computer now. <button className="button secondary" onClick={storage.refresh}>Check again</button></p>
-      :!storage.data?<p role="status">Checking private CT storage…</p>:null}
+      :!storage.data?<p role="status">Checking private CT storage…</p>:null)}
     <section className="work-card study-panel"><h2>Study files</h2>
       <div className="packet-files">{inputs.map(input=><label key={input.key}>
         <strong>{input.label}</strong><small>{input.filename}</small>
-        <input type="file" accept=".zip" disabled={!!busy} onChange={e=>{
+        <input type="file" accept=".zip" disabled={!!busy||driveBusy} onChange={e=>{
           const file=e.target.files?.[0];
-          setFiles(f=>({...f,[input.key]:file}));setPackets(null);setProgress(null);setError('');setPhase('');
+          setFiles(f=>({...f,[input.key]:file}));setPackets(null);setLinks({});setProgress(null);setError('');setPhase('');
         }}/>
       </label>)}</div>
       {!packets&&<div className="actions"><button className="button secondary" disabled={!!busy||inputs.some(x=>!files[x.key])} onClick={()=>void verify()}>Verify files</button>
@@ -83,13 +104,17 @@ export default function AdminUpload() {
     {packets&&<>
       <section className="work-card study-panel">
         <h2>Review study</h2><p>{packets.cases.length} CT volumes · {packets.cases.length*4} reports · {sizeLabel(volumeBytes)}</p>
-        <label>Study ID<input type="text" required maxLength={40} disabled={!!busy} value={prefix} onChange={e=>{setPrefix(e.target.value);setProgress(null);setError('');setPhase('');}}/></label>
+        <label>Study ID<input type="text" required maxLength={40} disabled={!!busy||driveBusy} value={prefix} onChange={e=>{setPrefix(e.target.value);setProgress(null);setError('');setPhase('');}}/></label>
         {!validPrefix&&<p role="alert">Use 1–40 letters, digits, hyphens or underscores, starting with a letter or digit.</p>}
         <details><summary>Preview shared report assignments</summary><div className="table-scroll"><table>
           <thead><tr>{['Case','Report A','Report B','Report C','Report D'].map(x=><th key={x}>{x}</th>)}</tr></thead>
           <tbody>{packets.cases.map(c=><tr key={c.case_id}><td>{c.case_id}</td>{['A','B','C','D'].map(l=><td key={l}>{c.reports.find(r=>r.letter===l)?.model_name}</td>)}</tr>)}</tbody>
         </table></div></details>
       </section>
+      {source==='drive'&&<>
+        <DriveFolderUpload packets={packets} disabled={!!busy} links={links} onLinks={value=>{setLinks(value);setError('');}} onBusyChange={setDriveBusy}/>
+        <DriveLinks caseIds={packets.cases.map(c=>c.case_id)} links={links} setLinks={value=>{setLinks(value);setError('');}} disabled={!!busy||driveBusy}/>
+      </>}
       <section className="work-card study-panel"><h2>Assign readers</h2>
         <p>All selected readers see the same cases and report letters. You can add readers after publishing.</p>
         {roster.error?<p role="alert" className="error">{roster.error} <button className="button secondary" onClick={roster.refresh}>Retry</button></p>
@@ -97,8 +122,8 @@ export default function AdminUpload() {
           :<div className="reader-checks">{roster.data.doctors.map(name=><label key={name}><input type="checkbox" disabled={!!busy} checked={doctors.includes(name)}
               onChange={e=>setDoctors(prev=>e.target.checked?[...prev,name]:prev.filter(user=>user!==name))}/>{name}</label>)}</div>}
       </section>
-      <div className="study-submit"><button disabled={!!busy||!validPrefix||!storage.data?.ready} className="button primary" onClick={()=>void publish()}>{progress?'Resume and publish':'Upload and publish'}</button>
-        {busy==='upload'&&<button className="button secondary" onClick={()=>operation.current?.abort()}>Pause</button>}
+      <div className="study-submit"><button disabled={!!busy||driveBusy||!validPrefix||(source==='r2'&&!storage.data?.ready)} className="button primary" onClick={()=>void publish()}>{source==='drive'?(busy==='upload'?'Publishing…':'Publish study'):progress?'Resume and publish':'Upload and publish'}</button>
+        {busy==='upload'&&source==='r2'&&<button className="button secondary" onClick={()=>operation.current?.abort()}>Pause</button>}
         {progress&&<progress aria-label="CT upload progress" value={progress.bytes} max={volumeBytes}/>}
       </div>
       {progress&&<p role="status">{busy?progress.message:phase}</p>}

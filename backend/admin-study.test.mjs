@@ -17,6 +17,59 @@ function database(sqlite) {
     catch(e){sqlite.exec('ROLLBACK');throw e;}
   }};
 }
+
+test('linked Drive CTs publish without R2 and expose the file link and digest only to assigned readers',async t=>{
+  const sqlite=new DatabaseSync(':memory:'); t.after(()=>sqlite.close());
+  sqlite.exec(readFileSync(new URL('./schema.sql',import.meta.url),'utf8'));
+  const env={DB:database(sqlite)};
+  for(const [username,role] of [['a','admin'],['b','doctor'],['c','doctor']]){
+    sqlite.prepare('INSERT INTO accounts VALUES(?,?,?,?)').run(username,role,'salt','stamp');
+    sqlite.prepare('INSERT INTO account_sessions VALUES(?,?,?,?,?)').run(await digest(username),username,role,'stamp',20000000000);
+  }
+  async function call(path,user,data){
+    const response=await worker.fetch(new Request('https://example.invalid'+path,{
+      method:data?'POST':'GET',headers:{Authorization:'Bearer '+user,'Content-Type':'application/json'},
+      body:data?JSON.stringify(data):undefined}),env);
+    return {status:response.status,body:await response.json()};
+  }
+  const reports=[...'ABCD'].map((letter,i)=>({letter,model_name:['morph','m3d','btb','ctchat'][i],text:'report '+i}));
+  const scan={case_id:'Case01',case_name:'First scan',sha256:'a'.repeat(64),size:500,reports,
+    drive_url:'https://drive.google.com/open?id=private_file_01&resourcekey=0-safe&usp=sharing'};
+  const study={prefix:'Drive',cases:[scan],doctors:['b']};
+  const endpoint='/admin/drive-studies';
+  const caseUrl='/blind/cases/Drive-Case01';
+  assert.equal((await call(endpoint,'b',study)).status,403);
+  for(const drive_url of ['https://drive.google.com.example.com/file/d/private_file_01/view',
+    'https://bad@drive.google.com/open?id=private_file_01','https://drive.google.com/drive/folders/private_file_01']){
+    assert.equal((await call(endpoint,'a',{...study,cases:[{...scan,drive_url}]})).status,400);
+  }
+  assert.equal((await call(endpoint,'a',{...study,cases:[scan,{...scan,case_id:'Case02'}]})).status,400);
+  assert.equal((await call(endpoint,'a',{...study,doctors:['unknown']})).status,400);
+  assert.equal(sqlite.prepare('SELECT COUNT(*) AS n FROM web_batches').get().n,0);
+  assert.equal((await call(caseUrl,'b')).status,404);
+  for(let i=0;i<2;i++){
+    const saved=await call(endpoint,'a',study);
+    assert.equal(saved.status,200,saved.body.error);
+    assert.equal(saved.body.state,'published');
+    assert.equal(saved.body.existing,i!==0);
+  }
+  assert.equal((await call(caseUrl,'c')).status,404);
+  assert.equal((await call(caseUrl+'/image','c')).status,404);
+  const {body}=await call(caseUrl,'b');
+  assert.equal(body.imaging.drive_url,'https://drive.google.com/file/d/private_file_01/view?resourcekey=0-safe');
+  assert.equal(body.imaging.sha256,scan.sha256);
+  assert.equal(body.imaging.size,500);
+  assert.ok(body.reports.every(report=>!Object.hasOwn(report,'model_name')));
+  assert.equal((await call(caseUrl+'/image','b')).status,409);
+  assert.equal((await call(endpoint,'a',{...study,cases:[{...scan,drive_url:scan.drive_url.replace('file_01','file_02')}]})).status,409);
+  assert.equal((await call('/admin/enrollment','a',{username:'c',prefix:study.prefix})).status,200);
+  const scores=reports.map(r=>({letter:r.letter,rating:4,comment:''}));
+  assert.equal((await call(caseUrl+'/ratings','b',{revision:body.revision,ratings:scores})).status,200);
+  const other=(await call(caseUrl,'c')).body;
+  assert.equal(other.imaging.drive_url,body.imaging.drive_url);
+  assert.ok(other.reports.every(report=>report.rating===null));
+  assert.equal((await call('/admin/cases/Drive-Case01/editor','a')).body.locked,true);
+});
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
 function storage(){
   const uploads=new Map(), objects=new Map();

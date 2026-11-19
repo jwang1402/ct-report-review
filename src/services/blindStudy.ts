@@ -10,7 +10,7 @@ export interface StudyDetail {
   case_id:string;
   case_name:string;
   revision?:string;
-  imaging:{type:'NIFTI';filename:string;size:number};
+  imaging:{type:'NIFTI';filename:string;size:number;drive_url?:string;sha256?:string};
   reports:(ReaderReport|NamedReport)[];
 }
 export interface StudyResult {

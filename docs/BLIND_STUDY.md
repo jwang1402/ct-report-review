@@ -7,7 +7,8 @@
 ## 网站上线后，如何在浏览器里操作
 
 1. 从[管理员入口](https://jwang1402.github.io/ct-report-review/#/admin)登录，进入 **Readers → Create a reader account**，为每位医生设置个人账号和密码。首位管理员由项目所有者在下方的「建立管理员账号」步骤中创建。
-2. 打开 **Upload study**。从本地 `C:\MediLLM-main\test\baseline\MORPH-CT\results` 分别选择以下三个文件：
+2. 在学校允许用于此研究的 Google Drive 中建一个专用空文件夹，常规访问权限选「受限」，给参与医生的 Google 账号授予可下载的「查看者」权限。仅分享影像文件夹，解盲包留在管理员电脑上。
+3. 管理员打开 **Upload study** 的 Google Drive 选项。从本地 `C:\MediLLM-main\test\baseline\MORPH-CT\results` 选择研究包：
 
    | 页面字段 | 选择文件 |
    |---|---|
@@ -15,15 +16,15 @@
    | Anonymous reports | `External-Blind-Review-4Models-ZH\Reader01.zip` |
    | Model key | `External-Blind-Review-4Models-ZH\Coordinator_ONLY.zip` |
 
-3. 点 **Verify files**，核对页面显示 10 例 CT、40 份报告，以及每例的 A–D 模型对应关系。勾选参与医生，点 **Upload and publish**。中断后使用同样的文件和研究编号续传。勾选的医生在整套发布成功后可以阅片。
-4. 在管理员病例列表打开病例，从编辑入口修改病例显示名称或报告文本。医生提交这个病例的第一份评分后，该病例的报告会锁定，已保存的评分始终对应当时看到的文本。
-5. 把同一个[医生入口](https://jwang1402.github.io/ct-report-review/#/doctor)发给所有医生，分别提供其个人凭据。以后再添医生，可在 **Readers** 建账号、选已发布研究、点 **Assign cases**。管理员从 **Results** 按医生筛选评分和导出 CSV。
+4. 点 **Verify files**，核对 10 例和 40 份报告。依次点 **Connect Google Drive → Choose folder → Upload and verify CTs**，选择上一步的受限文件夹。上传成功后，页面自动填入每例影像的链接。选择参与医生，点 **Publish study**。后台保存报告、分配关系和链接，影像存于 Drive。如果 Google 账号限制网页上传，也可在 Drive 手动上传 `External-Blind-Review-4Models-ZH\Web-Import-Local\Images` 中的十个文件，再将每例文件链接粘贴到网页。
+5. 在管理员病例列表打开病例，可以修改病例显示名称或报告文本。医生提交这个病例的第一份评分后，该病例的报告会锁定。
+6. 把同一个[医生入口](https://jwang1402.github.io/ct-report-review/#/doctor)发给所有医生，分别提供个人账号。医生点 **Open CT in Drive**，使用已获准的 Google 账号下载 CT，再点 **Open downloaded CT**。网页校验文件后，可在三个切面查看影像并为旁边的报告评分。新增医生时，在 Drive 给其影像读取权限，并在网站 **Readers** 建账号、点 **Assign cases**。管理员可从 **Results** 导出评分。
 
 以下步骤用于首次部署和命令行导入。日常上传、编辑和分配可使用上面的网页流程。
 
 ## 首次准备
 
-在本机 Windows PowerShell 打开网站代码目录。需要 Python 3.11 以上、Node 22 以上、Wrangler 4，以及目标 Cloudflare 账号的 D1、R2 和 Workers 部署权限。病例仅使用经研究项目批准的存储账户和地区。
+在本机 Windows PowerShell 打开网站代码目录。需要 Python 3.11 以上、Node 22 以上、Wrangler 4，以及目标 Cloudflare 账号的 D1 和 Workers 部署权限。Drive 模式无需开通 R2。
 
 ```powershell
 Set-Location 'C:\MediLLM-main\test\output\ct-report-review\ct-report-review-main'
@@ -37,11 +38,7 @@ wrangler whoami
 
 若显示尚未登录，运行 `wrangler login`，在浏览器登录原网站使用的 Cloudflare 账号，返回 PowerShell 再执行 `wrangler whoami`。上面的别名对当前窗口有效。
 
-核对 `backend/wrangler.jsonc` 中的数据库 ID 和名称。使用专用 R2 桶，绑定名为 `IMAGES`。新桶只创建一次。Cloudflare 控制台的桶设置中应显示 **Public Development URL 禁用**、**无公开自定义域名**。登录网站后的影像请求由 Worker 校验当前用户的病例分配，再读取私有桶。
-
-```powershell
-wrangler r2 bucket create ct-report-review-private-images
-```
+核对 `backend/wrangler.jsonc` 中的数据库 ID 和名称。常规部署只需名为 `DB` 的 D1 绑定。
 
 ### 准备评分数据库
 
@@ -76,7 +73,7 @@ $images = Join-Path $results 'External-Blind-Review-5Models\Reader_Images.zip'
 python scripts/prepare-blind-study.py check --study-dir "$study" --images-zip "$images"
 ```
 
-`check` 在本机核对压缩包哈希、病例配对、40 篇双语报告以及来自 Reader01 的 40 条共用字母映射。下面的命令将材料导入一次，并开通首位医生的 10 个病例。
+`check` 在本机核对压缩包哈希、病例配对、40 篇双语报告以及来自 Reader01 的 40 条共用字母映射。使用 Drive 时，在网页登记链接即可。仅针对另行启用私有 R2 的部署，在配置文件中添加 `r2_buckets`，将已有的私有桶绑定为 `IMAGES` 后，以下命令可以将影像存入该桶，并分配给首位医生。
 
 ```powershell
 python scripts/prepare-blind-study.py import --remote --study-dir "$study" --images-zip "$images" --assign reader01
@@ -101,7 +98,7 @@ foreach ($name in 'reader02','reader03','reader04','reader05') {
 
 ## 发布与核对
 
-1. 从网站仓库根目录执行 `wrangler deploy --config backend/wrangler.jsonc`。核对部署输出中的 `DB` 和 `IMAGES`，记下 HTTPS Worker 地址。
+1. 从网站仓库根目录执行 `wrangler deploy --config backend/wrangler.jsonc`。核对部署输出中的 `DB`，记下 HTTPS Worker 地址。
 2. 在 GitHub 仓库 Settings → Secrets and variables → Actions → Variables 中，将 `REVIEW_API_URL` 设为上述 Worker 地址（相同地址可沿用）。在 Settings → Pages 中确认 Source 为 GitHub Actions。当前本地目录已关联网站的 `main` 分支。从该目录运行下列命令，先核对即将提交的文件名，再提交代码。推送到 `main` 会自动触发 `Deploy CT Report Review`；在 GitHub 的 Actions 页面等待部署成功。
 
    ```powershell

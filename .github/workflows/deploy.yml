@@ -27,6 +27,8 @@ jobs:
       - run: npm run build
         env:
           VITE_REVIEW_API_URL: ${{ vars.REVIEW_API_URL }}
+          VITE_GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
+          VITE_GOOGLE_PICKER_KEY: ${{ vars.GOOGLE_PICKER_KEY }}
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
