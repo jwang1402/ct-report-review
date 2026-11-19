@@ -4,6 +4,7 @@ import {useStudyData} from '../services/blindStudy';
 import {api} from '../services/session';
 import {message} from '../utils';
 import './DoctorAccounts.css';
+import PublicStudyAccess from './PublicStudyAccess';
 
 export default function DoctorAccounts() {
   const doctors = useStudyData<{doctors:string[]}>('/admin/doctors');
@@ -45,8 +46,9 @@ export default function DoctorAccounts() {
 
   return <main className="page reader-admin">
     <div className="page-heading"><h1>Readers</h1></div>
-    <div className="work-card doctor-entry"><strong>Doctor sign-in link</strong><a href={url.href}>{url.href}</a></div>
-    <div className="reader-admin-forms">
+    <div className="work-card doctor-entry"><strong>Doctor review link</strong><a href={url.href}>{url.href}</a></div>
+    <PublicStudyAccess/>
+    <details className="private-readers"><summary>Private study accounts</summary><div className="reader-admin-forms">
       <form className="form-card" onSubmit={create}>
         <h2>Create a reader account</h2>
         <label>Username<input required autoComplete="off" pattern="[a-z0-9][a-z0-9_\-]{0,39}" title="Use lowercase letters, numbers, underscores or hyphens." value={username} onChange={e=>setUsername(e.target.value)} maxLength={40}/></label>
@@ -64,7 +66,7 @@ export default function DoctorAccounts() {
         {studies.data?.studies.length===0&&<p><Link to="/admin/upload">Import the first study</Link></p>}
         <button className="button secondary" disabled={!!busy||!reader||!prefix}>{busy==='assign'?'Assigning…':'Assign cases'}</button>
       </form>
-    </div>
+    </div></details>
     {feedback&&<p role="status">{feedback}</p>}
     {(error||doctors.error||studies.error)&&<p role="alert" className="error">{error||doctors.error||studies.error}</p>}
   </main>;

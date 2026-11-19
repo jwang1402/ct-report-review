@@ -1,5 +1,6 @@
 import {adminStudy,driveImage,StudyError} from './admin-study.mjs';
 import {manageReaders} from './admin-doctor.mjs';
+import {guestSession,joinStudy,listReaderStudies,publicStudyImages,setReaderAccess} from './public-readers.mjs';
 const origins = new Set(['https://jwang1402.github.io', 'http://127.0.0.1:5173', 'http://localhost:5173']);
 const encoder = new TextEncoder();
 const casePath = /^\/blind\/cases\/([A-Za-z0-9_-]{1,100})(?:\/(ratings|image))?$/;
@@ -92,7 +93,7 @@ async function sessionFor(request, db, now) {
   const match = /^Bearer ([^\s]{1,200})$/.exec(request.headers.get('Authorization') || '');
   if (!match) throw new HttpError(401, 'Please sign in.');
   const tokenHash = await digest(match[1]);
-  const user = await db.prepare(
+  const user = match[1].startsWith('reader.') ? await guestSession(db,tokenHash,now) : await db.prepare(
     'SELECT a.username,a.role,s.expires FROM account_sessions s JOIN accounts a ON a.username=s.username ' +
     'AND a.role=s.role AND a.password_hash=s.credential_stamp WHERE s.token_hash=? AND s.expires>?'
   ).bind(tokenHash, now).first();
@@ -223,11 +224,14 @@ export default {
       const path = url.pathname;
       const now = Math.floor(Date.now()/1000);
       if (path === '/health' && request.method === 'GET') return reply({ok:true});
+      if (path === '/public/studies' && request.method === 'GET') return reply(await listReaderStudies(env.DB,false));
+      if (path === '/public/readers' && request.method === 'POST') return reply(await joinStudy(request,env.DB,now,{jsonBody,digest}));
       if (path === '/login' && request.method === 'POST') return reply(await login(request,env.DB,now));
       const {user,tokenHash} = await sessionFor(request,env.DB,now);
       if (path === '/session' && request.method === 'GET') return reply(user);
       if (path === '/logout' && request.method === 'POST') {
-        await env.DB.prepare('DELETE FROM account_sessions WHERE token_hash=?').bind(tokenHash).run();
+        const sql=user.public_study ? 'UPDATE public_readers SET closed=1 WHERE token_hash=?' : 'DELETE FROM account_sessions WHERE token_hash=?';
+        await env.DB.prepare(sql).bind(tokenHash).run();
         return reply({ok:true});
       }
       if (path === '/blind/cases' && request.method === 'GET') return reply(await caseList(env.DB,user));
@@ -247,6 +251,10 @@ export default {
       }
       if (path.startsWith('/admin/')) {
         requireRole(user,'admin');
+        if (path==='/admin/public-studies' && request.method==='GET') return reply(await listReaderStudies(env.DB,true));
+        if (path==='/admin/public-studies' && request.method==='POST') return reply(await setReaderAccess(env.DB,await jsonBody(request,4096)));
+        const imageList=/^\/admin\/public-studies\/([A-Za-z0-9_-]+)\/images$/.exec(path);
+        if (imageList && request.method==='GET') return reply(await publicStudyImages(env.DB,imageList[1]));
         if (path==='/admin/storage' && request.method==='GET') return reply({ready:Boolean(env.IMAGES)});
         if ((path==='/admin/batches'||path.startsWith('/admin/batches/')) && request.method!=='GET' && !env.IMAGES) {
           throw new HttpError(503,'Activate private CT storage before uploading or publishing.');
@@ -256,7 +264,8 @@ export default {
         const study = await adminStudy(path,request,env,jsonBody);
         if (study) return reply(study);
         if (path === '/admin/results' && request.method === 'GET') {
-          const {results} = await env.DB.prepare('SELECT case_id,username,letter,model_name,rating,comment,updated_at FROM assignments ORDER BY case_id,username,letter').all();
+          const {results} = await env.DB.prepare('SELECT a.case_id,a.username,r.display_name,a.letter,a.model_name,a.rating,a.comment,a.updated_at '+
+            'FROM assignments a LEFT JOIN public_readers r USING(username) ORDER BY a.case_id,a.username,a.letter').all();
           return reply({results});
         }
       }
@@ -278,6 +287,8 @@ export default {
   async scheduled(event, env) {
     const now = Math.floor(Date.now()/1000);
     await env.DB.batch([env.DB.prepare('DELETE FROM account_sessions WHERE expires<?').bind(now),
-      env.DB.prepare('DELETE FROM sessions WHERE expires<?').bind(now),env.DB.prepare('DELETE FROM login_attempts')]);
+      env.DB.prepare('DELETE FROM sessions WHERE expires<?').bind(now),env.DB.prepare('DELETE FROM login_attempts'),
+      env.DB.prepare('DELETE FROM accounts WHERE username IN (SELECT r.username FROM public_readers r WHERE (r.closed=1 OR r.expires<?) '+
+        'AND NOT EXISTS(SELECT 1 FROM assignments a WHERE a.username=r.username AND a.rating IS NOT NULL) LIMIT 100)').bind(now)]);
   }
 };

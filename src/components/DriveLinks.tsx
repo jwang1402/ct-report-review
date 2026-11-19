@@ -2,14 +2,14 @@ import {useState} from 'react';
 import {parseDriveLinksTable} from '../services/restrictedDrive';
 import {message} from '../utils';
 
-export default function DriveLinks({caseIds,links,setLinks,disabled}:{
-  caseIds:string[];links:Record<string,string>;setLinks:(links:Record<string,string>)=>void;disabled:boolean
+export default function DriveLinks({caseIds,links,setLinks,disabled,allowPublic=false}:{
+  caseIds:string[];links:Record<string,string>;setLinks:(links:Record<string,string>)=>void;disabled:boolean;allowPublic?:boolean
 }) {
   const [table,setTable]=useState('');
   const [error,setError]=useState('');
   return <section className="work-card study-panel">
     <h2>Case file links</h2>
-    <p>To add links manually, extract Reader_Images.zip, upload the .nii.gz files to Drive, and paste each file’s link below. Give your readers download access to the restricted folder.</p>
+    <p>To add links manually, paste each .nii.gz file’s link below. {allowPublic?'Set the approved files to “Anyone with the link” with download access.':'Give the assigned readers download access to the restricted folder.'}</p>
     <div className="drive-file-links">{caseIds.map(id=><label key={id}>
       {id}.nii.gz
       <input disabled={disabled} type="url" placeholder="Google Drive file link" value={links[id]??''}

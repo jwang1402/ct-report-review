@@ -1,20 +1,27 @@
 import {useEffect, useState, type FormEvent, type ReactNode} from 'react';
 import {useLocation} from 'react-router-dom';
 import {ScanLine} from 'lucide-react';
-import {api, login, sessionToken, clearSession} from '../services/session';
+import {api, login, sessionToken, clearSession,workspaceRole,type Identity} from '../services/session';
+import PublicReaderEntry from './PublicReaderEntry';
 import {message} from '../utils';
 
-export interface Identity { username:string; role:'admin'|'doctor'; }
+export type {Identity} from '../services/session';
 async function currentIdentity():Promise<Identity> {
   const session = await api('/session');
   if (typeof session.username !== 'string' || !['admin','doctor'].includes(session.role)) {
     throw new Error('This account has no assigned study role.');
   }
-  return {username: session.username, role: session.role};
+  return {username:session.username,role:session.role,display_name:session.display_name,public_study:session.public_study};
 }
 
 export function AuthGate({children}:{children:(user:Identity)=>ReactNode}) {
+  const {pathname}=useLocation();
+  return <WorkspaceGate key={workspaceRole(pathname)}>{children}</WorkspaceGate>;
+}
+
+function WorkspaceGate({children}:{children:(user:Identity)=>ReactNode}) {
   const {pathname} = useLocation();
+  const role=workspaceRole(pathname);
   const [user,setUser] = useState<Identity|null>(null);
   const [checking,setChecking] = useState(true);
   const [username,setUsername] = useState('');
@@ -31,7 +38,10 @@ export function AuthGate({children}:{children:(user:Identity)=>ReactNode}) {
       if (!token) { setChecking(false); return; }
       try {
         const identity = await currentIdentity();
-        if (active && token === sessionToken()) setUser(identity);
+        if (active && token === sessionToken()) {
+          if(identity.role===role) setUser(identity);
+          else clearSession();
+        }
       } catch (e) {
         if (active && token === sessionToken()) { setUser(null); setError(message(e)); }
       } finally { if (active) setChecking(false); }
@@ -39,7 +49,7 @@ export function AuthGate({children}:{children:(user:Identity)=>ReactNode}) {
     void verify();
     const timer = window.setInterval(() => { if(sessionToken()) void verify(); },60000);
     return () => { active=false; clearInterval(timer); window.removeEventListener('ct-session-ended',end); };
-  },[]);
+  },[role]);
 
   async function signIn(event:FormEvent) {
     event.preventDefault();
@@ -47,13 +57,16 @@ export function AuthGate({children}:{children:(user:Identity)=>ReactNode}) {
     setBusy(true); setError('');
     try {
       await login(username,password);
-      setUser(await currentIdentity());
+      const identity=await currentIdentity();
+      if(identity.role!==role)throw new Error('Use the sign-in page for your assigned role.');
+      setUser(identity);
     } catch(e) {
       clearSession(); setError(message(e));
     } finally { setPassword(''); setBusy(false); }
   }
   if(checking) return <main className="login-page" role="status">Checking session…</main>;
   if(user) return children(user);
+  if(role==='doctor'&&pathname!=='/doctor/account')return <PublicReaderEntry onStart={setUser}/>;
   return <main className="login-page"><form className="form-card login-card" onSubmit={signIn}>
     <ScanLine size={30}/><h1>{pathname.startsWith('/admin')?'Administrator sign-in':'CT Report Review'}</h1>
     <p>Sign in with your assigned study account.</p>

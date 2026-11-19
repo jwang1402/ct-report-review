@@ -24,12 +24,14 @@ function Workspace({user}:{user:Identity}) {
         {isAdmin&&<NavLink to="/admin/results">Results</NavLink>}
         {isAdmin&&<NavLink to="/admin/archive">Previous reviews</NavLink>}
       </nav>
-      <div className="header-end"><span>{user.username}</span><button className="button secondary" onClick={()=>void logout().catch(()=>{})}>Sign out</button></div>
+      <div className="header-end"><span>{user.display_name||user.username}</span><button className="button secondary"
+        title={user.public_study?'End this review session before leaving a shared computer':undefined}
+        onClick={()=>void logout().catch(()=>{})}>{user.public_study?'End session':'Sign out'}</button></div>
     </header>
     <Suspense fallback={<p className="page" role="status">Loading…</p>}>
       <Routes>
         <Route path={home} element={<StudyList role={user.role}/>}/>
-        <Route path={home+'/cases/:caseId'} element={<BlindCase role={user.role}/>}/>
+        <Route path={home+'/cases/:caseId'} element={<BlindCase role={user.role} publicReader={!!user.public_study}/>}/>
         {isAdmin&&<Route path="/admin/upload" element={<AdminUpload/>}/>}
         {isAdmin&&<Route path="/admin/readers" element={<DoctorAccounts/>}/>}
         {isAdmin&&<Route path="/admin/cases/:caseId/edit" element={<AdminCaseEditor/>}/>}

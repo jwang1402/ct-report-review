@@ -14,7 +14,7 @@ export interface StudyDetail {
   reports:(ReaderReport|NamedReport)[];
 }
 export interface StudyResult {
-  case_id:string; username:string; letter:Letter; model_name:string;
+  case_id:string; username:string; display_name?:string|null; letter:Letter; model_name:string;
   rating:number|null; comment:string; updated_at:string|null;
 }
 export const caseEndpoint=(id:string)=>'/blind/cases/'+encodeURIComponent(id);
@@ -36,7 +36,7 @@ export function useStudyData<T>(path:string) {
 }
 
 export function exportBlindResults(rows:StudyResult[]) {
-  const columns:(keyof StudyResult)[]=['case_id','username','letter','model_name','rating','comment','updated_at'];
+  const columns:(keyof StudyResult)[]=['case_id','username','display_name','letter','model_name','rating','comment','updated_at'];
   const escape=(value:unknown)=>{
     let text=String(value??'');
     if(/^\s*[=+@-]|^[\t\r]/.test(text)) text="'"+text;

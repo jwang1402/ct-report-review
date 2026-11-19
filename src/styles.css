@@ -116,3 +116,5 @@ input:not([type=checkbox]):not([type=range]),textarea,select{background:#fff;col
   .blind-header nav { overflow-x: auto; min-width: 0; }
   .blind-header nav a { flex-shrink: 0; }
 }
+.reader-consent {display:flex!important;align-items:baseline;gap:.65rem;font-weight:600}
+.reader-consent input {width:auto;flex:none}

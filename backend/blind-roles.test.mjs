@@ -115,3 +115,72 @@ test('physicians rate the same four anonymous reports independently and the admi
   const sameModel = results.filter(row => row.model_name === models[0]).sort((a, b) => a.username.localeCompare(b.username));
   assert.deepEqual(sameModel.map(r => [r.username, r.letter, r.rating]), [['doctor-one', 'A', 1], ['doctor-two', 'A', 5]]);
 });
+
+test('name-only readers are isolated, even with identical names, and only see an explicitly opened Drive study', async t => {
+  const sqlite = new DatabaseSync(':memory:');
+  t.after(()=>sqlite.close());
+  sqlite.exec(readFileSync(new URL('./schema.sql',import.meta.url),'utf8'));
+  // Applying the additive migration a second time preserves all existing data.
+  sqlite.exec(readFileSync(new URL('./migrations/0005_public_reader_access.sql',import.meta.url),'utf8'));
+  const env={DB:d1(sqlite)};
+  const api=async(path,body,token)=>worker.fetch(new Request('https://fixture.invalid'+path,{
+    method:body?'POST':'GET',headers:{'Content-Type':'application/json',...(token&&{Authorization:'Bearer '+token})},
+    ...(body&&{body:JSON.stringify(body)})
+  }),env);
+  sqlite.prepare("INSERT INTO accounts VALUES('coord','admin',?,?)").run('salt',await passwordHash('sample-password','salt'));
+  const admin=(await (await api('/login',{username:'coord',password:'sample-password'})).json()).token;
+  const sample={case_id:'Case01',case_name:'Private source name',size:321,sha256:'f'.repeat(64),
+    drive_url:'https://drive.google.com/file/d/fixture_AABBCC/view',reports:[...'ABCD'].map((letter,i)=>({
+      letter,model_name:'opaque-'+i,text:'Text for report '+letter
+    }))};
+  const packet={prefix:'PrivateStudy',doctors:[],cases:[sample]};
+  assert.equal((await api('/admin/drive-studies',packet,admin)).status,200);
+  const publicList=async()=>(await api('/public/studies')).json();
+  assert.deepEqual(await publicList(),{studies:[]});
+  const prefix='OpenStudy';
+  const admission={name:'王医生',prefix,entry_key:crypto.randomUUID()+crypto.randomUUID()};
+  assert.equal((await api('/public/readers',{...admission,prefix:packet.prefix})).status,404);
+  const opened={...packet,prefix,public_access:true};
+  assert.equal((await api('/admin/drive-studies',opened,admin)).status,200);
+  assert.deepEqual(await publicList(),{studies:[{prefix,case_count:1}]});
+  assert.equal((await api('/admin/public-studies/'+prefix+'/images')).status,401);
+  const {images}=await (await api('/admin/public-studies/'+prefix+'/images',null,admin)).json();
+  assert.deepEqual(images,[{case_id:prefix+'-Case01',size:321,drive_url:sample.drive_url,sha256:sample.sha256}]);
+  assert.equal((await api('/public/readers',{...admission,entry_key:'guess'})).status,400);
+  const first=await (await api('/public/readers',admission)).json();
+  assert.equal(first.display_name,admission.name);
+  assert.equal(first.public_study,prefix);
+  assert.ok(first.token?.length>40);
+  const retry=await (await api('/public/readers',admission)).json();
+  assert.equal(retry.token,first.token);
+  assert.equal((await api('/public/readers',{...admission,name:'Different name'})).status,409);
+  const second=await (await api('/public/readers',{...admission,entry_key:crypto.randomUUID()+crypto.randomUUID()})).json();
+  assert.notEqual(second.username,first.username);
+  assert.notEqual(second.token,first.token);
+  assert.deepEqual(await (await api('/admin/doctors',null,admin)).json(),{doctors:[]});
+  assert.equal((await api('/admin/results',null,second.token)).status,403);
+  assert.equal((await api('/admin/public-studies',{prefix,enabled:true},second.token)).status,403);
+  const path='/blind/cases/'+prefix+'-Case01';
+  assert.equal((await api('/blind/cases/PrivateStudy-Case01',null,first.token)).status,404);
+  const report=await (await api(path,null,first.token)).json();
+  assert.deepEqual(report.reports.map(r=>r.letter),[...'ABCD']);
+  assert.equal(JSON.stringify(report).includes('opaque-'),false);
+  const answers={revision:report.revision,ratings:[...'ABCD'].map(letter=>({letter,rating:5,comment:'first reader only'}))};
+  assert.equal((await api(path+'/ratings',answers,first.token)).status,200);
+  const other=await (await api(path,null,second.token)).json();
+  assert.ok(other.reports.every(r=>r.rating===null&&r.comment===''));
+  const adminRows=(await (await api('/admin/results',null,admin)).json()).results;
+  assert.equal(new Set(adminRows.map(r=>r.username)).size,2);
+  assert.ok(adminRows.every(r=>r.display_name===admission.name));
+  assert.equal((await api('/logout',{},first.token)).status,200);
+  assert.equal((await api('/public/readers',admission)).status,403);
+  assert.equal((await api(path,null,first.token)).status,401);
+  assert.equal((await api('/admin/public-studies',{prefix,enabled:false},admin)).status,200);
+  assert.equal((await api(path,null,second.token)).status,401);
+  assert.deepEqual(await publicList(),{studies:[]});
+  assert.equal((await api('/admin/drive-studies',opened,admin)).status,200);
+  assert.deepEqual(await publicList(),{studies:[]});
+  assert.equal((await api('/admin/public-studies',{prefix,enabled:true},admin)).status,200);
+  assert.equal((await api(path,null,second.token)).status,401);
+  assert.equal(sqlite.prepare('SELECT COUNT(*) n FROM assignments WHERE rating=5').get().n,4);
+});

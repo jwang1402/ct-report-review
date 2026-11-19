@@ -321,17 +321,21 @@ async function saveEdit(db,id,data) {
 export async function adminStudy(path,request,env,jsonBody) {
   const db=env.DB, method=request.method;
   if (path==='/admin/doctors' && method==='GET') {
-    return {doctors:(await all(db,"SELECT username FROM accounts WHERE role='doctor' ORDER BY username")).map(r=>r.username)};
+    return {doctors:(await all(db,"SELECT username FROM accounts WHERE role='doctor' AND username NOT IN (SELECT username FROM public_readers) ORDER BY username")).map(r=>r.username)};
   }
   const edit=/^\/admin\/cases\/([A-Za-z0-9_-]{1,100})\/editor$/.exec(path);
   if (edit && method==='GET') return editor(db,edit[1]);
   if (edit && method==='POST') return saveEdit(db,edit[1],await jsonBody(request,1024*1024));
   if (path==='/admin/drive-studies' && method==='POST') {
     const data=await jsonBody(request,1024*1024);
+    check(data.public_access===undefined || typeof data.public_access==='boolean',400,'Choose whether to open the study to readers.');
     const manifest=normalize(data,true);
     const readers=await checkReaders(db,data.doctors);
     const batch=await createBatch(db,manifest);
     await publish(db,batch,readers);
+    if(data.public_access===true) {
+      await db.prepare('INSERT INTO public_studies(prefix,enabled) VALUES(?,1) ON CONFLICT(prefix) DO NOTHING').bind(batch.prefix).run();
+    }
     return {ok:true,state:'published',existing:batch.state==='published'};
   }
   if (path==='/admin/batches' && method==='POST') {

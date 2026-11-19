@@ -1,10 +1,10 @@
 # CT Report Review
 
-Two workspaces share the same CT viewer. Each doctor signs in to `#/doctor` with a personal account, reviews the study CTs and rates four anonymized reports per case. A coordinator signs in to `#/admin` to see the model behind each letter, track each reader's progress and export scores and comments.
+Doctors open `#/doctor`, enter their name and rate four anonymous reports per CT. For studies opened to the public, the viewer loads the approved images without a Google sign-in. Each reader's current tab holds the session used to save and resume ratings. Coordinators sign in to `#/admin` to publish studies and see ratings, comments and model names.
 
 ## Prepare the study
 
-Follow [四模型盲审部署与病例导入](docs/BLIND_STUDY.md) to set up D1 and create the first administrator. Upload the anonymized NIfTI files to a restricted Google Drive folder and grant the participating doctors viewer access. On **Upload study**, verify the study archives, match each case to its Drive file and publish the reports. **Readers** manages individual accounts and study assignments. All readers see the same cases and A–D reports. Administrators can edit a case before its first rating.
+Follow [四模型盲审部署与病例导入](docs/BLIND_STUDY.md) to set up D1 and create the first administrator. For cases approved for public release, create a dedicated Google Drive folder with **Anyone with the link · Viewer**. On **Upload study**, verify the study archives, select the public-sharing option and publish. Readers see the same cases and A–D reports. Administrators can edit a case before its first rating. Private studies retain individual accounts and restricted Drive sharing.
 
 ## Application
 

@@ -38,6 +38,21 @@ it('refuses public individual file grants even when the folder is restricted',as
   service([file],{[fileId]:['user','anyone']});
   await expect(run()).rejects.toThrow('restricted study folder');expect(uploadDriveBlob).not.toHaveBeenCalled();
 });
+it('accepts link-viewer permission only in public mode and passes the resource key on to readers',async()=>{
+  const saved={...file,resourceKey:'test_resource_key'};
+  vi.mocked(readDriveMetadata).mockImplementation(async(path:string)=>{
+    if(path==='files')return {files:[saved]};
+    return {permissions:[{type:'user',role:'owner'},{type:'anyone',role:'reader',allowFileDiscovery:false}]};
+  });
+  const result=await uploadPrivateFolder(packets,folder,new Map(),new AbortController().signal,()=>{},true);
+  expect(result.Case01).toBe('https://drive.google.com/file/d/'+file.id+'/view?resourcekey=test_resource_key');
+  expect(uploadDriveBlob).not.toHaveBeenCalled();
+});
+it('requires public read access before an approved upload',async()=>{
+  service();
+  await expect(uploadPrivateFolder(packets,folder,new Map(),new AbortController().signal,()=>{},true)).rejects.toThrow('Anyone with the link');
+  expect(uploadDriveBlob).not.toHaveBeenCalled();
+});
 it.each([[{...file,sha256Checksum:'invalid'}],[{...file,name:'Other.nii.gz'}],[file,file]])(
   'refuses mismatched hashes, names and duplicate files before uploading',async(...files)=>{
     service(files);await expect(run()).rejects.toThrow();expect(uploadDriveBlob).not.toHaveBeenCalled();

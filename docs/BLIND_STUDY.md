@@ -1,13 +1,13 @@
 # 四模型盲审部署与病例导入
 
-系统使用一个网站、两个入口和独立账号。管理员进入 `#/admin` 查看模型、评分与进度。每位医生使用自己的账号进入 `#/doctor`。**所有医生评阅同一组 10 例，每例看到相同的 A–D 报告，以相同顺序显示；评分与评语按账号隔离。** 医生人数由研究团队决定，研究开始后仍可追加。
+系统使用一个网站、两个入口。管理员通过密码进入 `#/admin`。公开研究的医生在 `#/doctor` 输入姓名即可开始。所有人按同一顺序评阅相同的 A–D 报告，评分和评语分别保存。
 
 现有四模型包为每例保存了四篇双语报告。网站选取 `Reader01.zip` 的病例顺序和该病例的字母映射，冻结为全研究共用版本。字母所对应的模型可随病例变化。新研究默认编号 `BR4shared`，已有研究与历史评分继续使用原编号。
 
 ## 网站上线后，如何在浏览器里操作
 
-1. 从[管理员入口](https://jwang1402.github.io/ct-report-review/#/admin)登录，进入 **Readers → Create a reader account**，为每位医生设置个人账号和密码。首位管理员由项目所有者在下方的「建立管理员账号」步骤中创建。
-2. 在学校允许用于此研究的 Google Drive 中建一个专用空文件夹，常规访问权限选「受限」，给参与医生的 Google 账号授予可下载的「查看者」权限。仅分享影像文件夹，解盲包留在管理员电脑上。
+1. 从[管理员入口](https://jwang1402.github.io/ct-report-review/#/admin)登录。首位管理员由项目所有者在下方的「建立管理员账号」步骤中创建。
+2. 为已获准公开分享的影像建立专用 Google Drive 文件夹，将常规访问权限设为「知道链接的任何人 · 查看者」，允许下载。文件夹只放匿名 CT，解盲包留在管理员电脑上。
 3. 管理员打开 **Upload study** 的 Google Drive 选项。从本地 `C:\MediLLM-main\test\baseline\MORPH-CT\results` 选择研究包：
 
    | 页面字段 | 选择文件 |
@@ -16,9 +16,11 @@
    | Anonymous reports | `External-Blind-Review-4Models-ZH\Reader01.zip` |
    | Model key | `External-Blind-Review-4Models-ZH\Coordinator_ONLY.zip` |
 
-4. 点 **Verify files**，核对 10 例和 40 份报告。依次点 **Connect Google Drive → Choose folder → Upload and verify CTs**，选择上一步的受限文件夹。上传成功后，页面自动填入每例影像的链接。选择参与医生，点 **Publish study**。后台保存报告、分配关系和链接，影像存于 Drive。如果 Google 账号限制网页上传，也可在 Drive 手动上传 `External-Blind-Review-4Models-ZH\Web-Import-Local\Images` 中的十个文件，再将每例文件链接粘贴到网页。
+4. 点 **Verify files**，核对 10 例和 40 份报告，勾选 **These cases and reports are approved for public sharing**。依次点 **Connect Google Drive → Choose folder → Upload and verify CTs**。管理员授权自己的 Drive 后，选择上一步的文件夹。影像上传成功后自动填入链接，点 **Publish study**。网页用免登录方式核对影像内容后才会开放研究。如果 Google 账号限制网页上传，也可手动上传 `External-Blind-Review-4Models-ZH\Web-Import-Local\Images` 中的十份 CT，再粘贴文件链接。
 5. 在管理员病例列表打开病例，可以修改病例显示名称或报告文本。医生提交这个病例的第一份评分后，该病例的报告会锁定。
-6. 把同一个[医生入口](https://jwang1402.github.io/ct-report-review/#/doctor)发给所有医生，分别提供个人账号。医生点 **Open CT in Drive**，使用已获准的 Google 账号下载 CT，再点 **Open downloaded CT**。网页校验文件后，可在三个切面查看影像并为旁边的报告评分。新增医生时，在 Drive 给其影像读取权限，并在网站 **Readers** 建账号、点 **Assign cases**。管理员可从 **Results** 导出评分。
+6. 把同一个[医生入口](https://jwang1402.github.io/ct-report-review/#/doctor)发给所有医生。填姓名后点 **Start review**，打开病例，网页自动读取 CT。医生可在三个切面查看影像并为旁边的报告评分。保存后刷新当前标签页可以继续，结束会话后不会通过输入姓名调出以往评分。管理员从 **Results** 按姓名查看或导出结果。
+
+对仅向指定医生开放的研究，保持公开选项未勾选，并使用受限 Drive 文件夹。医生使用个人账号及获授权的 Google 账号；账号分配操作见下文。
 
 以下步骤用于首次部署和命令行导入。日常上传、编辑和分配可使用上面的网页流程。
 
@@ -81,7 +83,7 @@ python scripts/prepare-blind-study.py import --remote --study-dir "$study" --ima
 
 如需先准备材料，可省略 `--assign reader01`。如首批已有多位医生，只需为各人建立个人账号，再追加 `--assign reader02 --assign reader03` 等参数。上传中断时可以用相同命令重试。影像按内容哈希存入私有 R2，共用映射、模型报告和个人评分存入 D1。
 
-## 研究开始后增加医生
+## 私有研究开始后增加医生账号
 
 例如追加第 2 至第 5 位医生，在网站仓库根目录运行以下 PowerShell 命令。把列表换成实际人员账号即可。账号已存在时，只运行该账号的 `assign` 命令。
 
@@ -110,10 +112,10 @@ foreach ($name in 'reader02','reader03','reader04','reader05') {
    git commit -m "Separate blinded physician review from administrator results"
    git push origin main
    ```
-3. 部署成功后，管理员入口为 `https://jwang1402.github.io/ct-report-review/#/admin`，所有医生均从 `https://jwang1402.github.io/ct-report-review/#/doctor` 登录，各用自己的账号。管理员在结果页查看每人的评分与真实模型，核对病例数和分配数。
+3. 部署成功后，管理员入口为 `https://jwang1402.github.io/ct-report-review/#/admin`，所有医生共用 `https://jwang1402.github.io/ct-report-review/#/doctor`。公开阅片只需姓名。管理员在结果页查看每人的评分与真实模型。
 4. 本版本收集网页的 1–5 分及评语。如研究还收集重大漏报、无依据重要发现、侧别错误计数或同例偏好，可为每位医生单独复制一份来自 **Reader01** 的空白 CSV，并以账号区分回收文件，以保持字母与网页一致。
 
-GitHub Pages 仅部署应用代码。研究包、临时 SQL、影像、解盲表均不应放进 `public`、GitHub Release、Issues 或公开 Drive 链接。如先前已通过其他渠道公开分发影像或映射，需要在原存储服务单独核查其共享权限。
+GitHub Pages 发布应用代码。解盲表、研究包和含报告的临时 SQL 留在管理员侧。公开 CT 使用专用的只读 Drive 文件夹；受限研究使用各自的私有文件夹。停止公开阅片后，可在 Drive 另行收回影像共享。
 
 ## 可选：本地演练
 
