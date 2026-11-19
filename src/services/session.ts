@@ -1,6 +1,12 @@
 export const apiBase=(import.meta.env.VITE_REVIEW_API_URL as string|undefined)?.replace(/\/$/,'');
+export const radiologistsPath='/radiologists';
+export function workspaceHome(role:Identity['role']) {
+  return role==='admin'?'/admin':radiologistsPath;
+}
 export function workspaceRole(path:string) {
-  return path==='/admin'||path.startsWith('/admin/')||path==='/results'||path==='/upload'?'admin':'doctor';
+  if(path==='/admin'||path.startsWith('/admin/')||path==='/results'||path==='/upload')return 'admin';
+  if(path===''||path==='/'||path==='/cases'||path===radiologistsPath||path.startsWith(radiologistsPath+'/'))return 'doctor';
+  return null;
 }
 function storageKey(){
   return workspaceRole(window.location.hash.slice(1).split('?')[0])==='admin'?'ct-review-session':'ct-review-reader-session';

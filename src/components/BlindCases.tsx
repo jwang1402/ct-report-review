@@ -2,7 +2,7 @@ import {lazy,Suspense,useEffect,useState,type ReactNode} from 'react';
 import {Link,useParams} from 'react-router-dom';
 import {ArrowLeft,ChevronRight,Download,FileText,PanelLeftClose,Plus,RefreshCw,ScanLine} from 'lucide-react';
 import {caseEndpoint,useStudyData,type StudyListItem,type StudyDetail,type ReaderReport,type NamedReport,type StudyResult} from '../services/blindStudy';
-import {api,ResponseError} from '../services/session';
+import {api,radiologistsPath,ResponseError,workspaceHome} from '../services/session';
 import {inCaseOrder} from '../services/caseOrder';
 import {message,saveFile} from '../utils';
 import {decisionLabels,ratings} from '../types';
@@ -16,7 +16,7 @@ import './CaseWorkspace.css';
 
 const Viewer=lazy(()=>import('./Viewer'));
 type Role=Identity['role'];
-const caseLink=(role:Role,id:string)=>'/'+role+'/cases/'+encodeURIComponent(id);
+const caseLink=(role:Role,id:string)=>workspaceHome(role)+'/cases/'+encodeURIComponent(id);
 
 function ReaderCaseLabel({id}:{id:string}) {
   const alias=id.match(/(?:^|-)(Case\d+)$/)?.[1]??id;
@@ -144,7 +144,7 @@ export function BlindCase({role,publicReader=false}:{role:Role;publicReader?:boo
   const {data,error,refresh}=useStudyData<StudyDetail>(caseEndpoint(caseId));
   const library=useStudyData<{cases:StudyListItem[]}>('/blind/cases');
   const cases=inCaseOrder(library.data?.cases??[]);
-  const back=role==='doctor'?'/doctor':'/admin/cases';
+  const back=role==='doctor'?radiologistsPath:'/admin/cases';
   if(!data)return <main className="page"><div className="empty"><ScanLine size={32}/><h2>{error||'Loading case…'}</h2>
     {error&&<button className="button secondary" onClick={refresh}>Retry</button>}<Link className="button secondary" to={back}>Back to cases</Link></div></main>;
   const doctorReports=data.reports.filter((r):r is ReaderReport=>!('model_name' in r)).sort((a,b)=>a.letter.localeCompare(b.letter));

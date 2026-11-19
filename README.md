@@ -1,6 +1,6 @@
 # CT Report Review
 
-Doctors open `#/doctor`, enter their name and select a case from the scrollable, numerically ordered **Case workspace**. The viewer shows loading progress for the CT. Each scan has four anonymous reports (A–D), displayed and downloaded in the original English. For a public study, the reader can open the images without a Google sign-in. Each reader's current tab holds the session used to save and resume ratings.
+Doctors open `#/radiologists`, enter their name and select a case from the scrollable, numerically ordered **Case workspace**. The viewer shows loading progress for the CT. Each scan has four anonymous reports (A–D), displayed and downloaded in the original English. For a public study, the reader can open the images without a Google sign-in. Each reader's current tab holds the session used to save and resume ratings.
 
 ## Prepare the study
 

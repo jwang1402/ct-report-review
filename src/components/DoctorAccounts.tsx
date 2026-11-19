@@ -1,7 +1,7 @@
 import {useState, type FormEvent} from 'react';
 import {Link} from 'react-router-dom';
 import {useStudyData} from '../services/blindStudy';
-import {api} from '../services/session';
+import {api,radiologistsPath} from '../services/session';
 import {message} from '../utils';
 import './DoctorAccounts.css';
 import PublicStudyAccess from './PublicStudyAccess';
@@ -18,7 +18,7 @@ export default function DoctorAccounts() {
   const [error,setError] = useState('');
   const url = new URL(window.location.href);
   url.search = '';
-  url.hash = '/doctor';
+  url.hash = radiologistsPath;
 
   async function create(event:FormEvent) {
     event.preventDefault();
@@ -46,7 +46,7 @@ export default function DoctorAccounts() {
 
   return <main className="page reader-admin">
     <div className="page-heading"><h1>Readers</h1></div>
-    <div className="work-card doctor-entry"><strong>Doctor review link</strong><a href={url.href}>{url.href}</a></div>
+    <div className="work-card doctor-entry"><strong>Radiologist review link</strong><a href={url.href}>{url.href}</a></div>
     <PublicStudyAccess/>
     <details className="private-readers"><summary>Private study accounts</summary><div className="reader-admin-forms">
       <form className="form-card" onSubmit={create}>

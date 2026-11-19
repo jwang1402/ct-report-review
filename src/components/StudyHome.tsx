@@ -6,7 +6,6 @@ import {CaseTable} from './BlindCases';
 
 export default function StudyHome({role}:{role:Identity['role']}) {
   const admin=role==='admin';
-  const library='/'+role+'/cases';
   const {data,error,refresh}=useStudyData<{cases:StudyListItem[]}>('/blind/cases');
   const cases=data?.cases;
   return <main className="page home-page">
@@ -27,7 +26,7 @@ export default function StudyHome({role}:{role:Identity['role']}) {
         <div className="empty" role="status"><span className="spinner"/><p>Loading published cases…</p></div>}
     </section>
     {admin&&<div className="home-bottom">
-      <Link to={library}><ScanLine size={20}/><div><h3>Clinical Review</h3><p>Inspect the CT study and evaluate each model report.</p></div><ArrowUpRight size={20}/></Link>
+      <Link to="/admin/cases"><ScanLine size={20}/><div><h3>Clinical Review</h3><p>Inspect the CT study and evaluate each model report.</p></div><ArrowUpRight size={20}/></Link>
       <Link to="/admin/results"><Activity size={20}/><div><h3>Review results</h3><p>Explore individual ratings and export reviewer feedback.</p></div><ArrowUpRight size={20}/></Link>
     </div>}
   </main>;

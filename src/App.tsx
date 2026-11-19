@@ -4,7 +4,7 @@ import {Activity,FolderOpen,Plus,ScanLine} from 'lucide-react';
 import {AuthGate, type Identity} from './components/AuthGate';
 import {BlindCase, StudyList} from './components/BlindCases';
 import StudyHome from './components/StudyHome';
-import {logout} from './services/session';
+import {logout,workspaceHome} from './services/session';
 
 const AdminResults=lazy(()=>import('./components/AdminResults'));
 const AdminUpload=lazy(()=>import('./components/AdminUpload'));
@@ -14,7 +14,7 @@ const LegacyWorkspace=lazy(()=>import('./LegacyWorkspace'));
 
 function Workspace({user}:{user:Identity}) {
   const isAdmin=user.role==='admin';
-  const home=isAdmin?'/admin':'/doctor';
+  const home=workspaceHome(user.role);
   return <>
     <header className="header">
       <Link className="brand" to={home}><span className="brand-icon"><ScanLine size={22}/></span><div>CT Report Review<small>CLINICAL RESEARCH</small></div></Link>
@@ -31,7 +31,7 @@ function Workspace({user}:{user:Identity}) {
     <Suspense fallback={<p className="page" role="status">Loading…</p>}>
       <Routes>
         <Route path={home} element={<StudyHome role={user.role}/>}/>
-        <Route path={home+'/cases'} element={isAdmin?<StudyList role={user.role}/>:<Navigate to="/doctor" replace/>}/>
+        <Route path={home+'/cases'} element={isAdmin?<StudyList role={user.role}/>:<Navigate to={home} replace/>}/>
         <Route path={home+'/cases/:caseId'} element={<BlindCase role={user.role} publicReader={!!user.public_study}/>}/>
         {isAdmin&&<Route path="/admin/upload" element={<AdminUpload/>}/>}
         {isAdmin&&<Route path="/admin/readers" element={<DoctorAccounts/>}/>}
@@ -40,7 +40,7 @@ function Workspace({user}:{user:Identity}) {
         {isAdmin&&<Route path="/admin/archive" element={<LegacyWorkspace/>}/>}
         {isAdmin&&<Route path="/results" element={<Navigate to="/admin/results" replace/>}/>}
         {isAdmin&&<Route path="/upload" element={<Navigate to="/admin/upload" replace/>}/>}
-        <Route path="/cases" element={<Navigate to={isAdmin?'/admin/cases':'/doctor'} replace/>}/>
+        <Route path="/cases" element={<Navigate to={isAdmin?'/admin/cases':home} replace/>}/>
         <Route path="*" element={<Navigate to={home} replace/>}/>
       </Routes>
     </Suspense>

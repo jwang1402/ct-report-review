@@ -1,7 +1,7 @@
 import {useEffect, useState, type FormEvent, type ReactNode} from 'react';
-import {useLocation} from 'react-router-dom';
+import {Link,useLocation} from 'react-router-dom';
 import {ScanLine} from 'lucide-react';
-import {api, login, sessionToken, clearSession,workspaceRole,type Identity} from '../services/session';
+import {api, login, sessionToken, clearSession,radiologistsPath,workspaceRole,type Identity} from '../services/session';
 import PublicReaderEntry from './PublicReaderEntry';
 import {message} from '../utils';
 
@@ -16,12 +16,13 @@ async function currentIdentity():Promise<Identity> {
 
 export function AuthGate({children}:{children:(user:Identity)=>ReactNode}) {
   const {pathname}=useLocation();
-  return <WorkspaceGate key={workspaceRole(pathname)}>{children}</WorkspaceGate>;
+  const role=workspaceRole(pathname);
+  if(!role)return <main className="page"><h1>Page not found</h1><Link to={radiologistsPath}>Open case review</Link></main>;
+  return <WorkspaceGate key={role} role={role}>{children}</WorkspaceGate>;
 }
 
-function WorkspaceGate({children}:{children:(user:Identity)=>ReactNode}) {
+function WorkspaceGate({role,children}:{role:Identity['role'];children:(user:Identity)=>ReactNode}) {
   const {pathname} = useLocation();
-  const role=workspaceRole(pathname);
   const [user,setUser] = useState<Identity|null>(null);
   const [checking,setChecking] = useState(true);
   const [username,setUsername] = useState('');
@@ -66,7 +67,7 @@ function WorkspaceGate({children}:{children:(user:Identity)=>ReactNode}) {
   }
   if(checking) return <main className="login-page" role="status">Checking session…</main>;
   if(user) return children(user);
-  if(role==='doctor'&&pathname!=='/doctor/account')return <PublicReaderEntry onStart={setUser}/>;
+  if(role==='doctor'&&pathname!==radiologistsPath+'/account')return <PublicReaderEntry onStart={setUser}/>;
   return <main className="login-page"><form className="form-card login-card" onSubmit={signIn}>
     <ScanLine size={30}/><h1>{pathname.startsWith('/admin')?'Administrator sign-in':'CT Report Review'}</h1>
     <label>Username<input autoComplete="username" required value={username} onChange={e=>setUsername(e.target.value)}/></label>

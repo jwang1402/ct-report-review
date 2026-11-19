@@ -2,11 +2,11 @@ import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {exportBlindResults,type StudyResult} from './blindStudy';
 
 const saved=new Map<string,string>();
-const location={hash:'#/doctor'};
+const location={hash:'#/radiologists'};
 
 beforeEach(()=>{
   saved.clear();
-  location.hash='#/doctor';
+  location.hash='#/radiologists';
   vi.resetModules();
   vi.stubEnv('VITE_REVIEW_API_URL','https://api.example.test');
   vi.stubGlobal('sessionStorage',{getItem:(s:string)=>saved.get(s)??null,setItem:(k:string,v:string)=>saved.set(k,v),removeItem:(k:string)=>saved.delete(k)});
@@ -29,8 +29,20 @@ it('retries an interrupted public entry under the same private key and isolates 
   expect(saved.has('ct-review-pending-reader')).toBe(false);
   expect(sessionToken()).toBe('guest-only-token');
   location.hash='#/admin/readers'; expect(sessionToken()).toBe('admin-only-token');
-  location.hash='#/doctor'; await logout(); expect(sessionToken()).toBe('');
+  location.hash='#/radiologists/cases/Study-Case01'; await logout(); expect(sessionToken()).toBe('');
   expect(saved.get('ct-review-session')).toBe('admin-only-token');
+});
+
+it('uses separate reader and admin routes and rejects retired reader links',async()=>{
+  const {workspaceHome,workspaceRole}=await import('./session');
+  expect(workspaceHome('doctor')).toBe('/radiologists');
+  expect(workspaceHome('admin')).toBe('/admin');
+  for(const suffix of ['', '/account', '/cases/Study-Case01']){
+    expect(workspaceRole('/radiologists'+suffix)).toBe('doctor');
+    expect(workspaceRole('/doctor'+suffix)).toBeNull();
+  }
+  expect(workspaceRole('/admin/cases/Study-Case01')).toBe('admin');
+  expect(workspaceRole('/radiologists-extra')).toBeNull();
 });
 
 it('exports the entered name and the individual reviewer identifier and keeps spreadsheet formulas inert',()=>{

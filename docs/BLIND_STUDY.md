@@ -1,6 +1,6 @@
 # 四模型盲审部署与病例导入
 
-系统使用一个网站、两个入口。管理员通过密码进入 `#/admin`。公开研究的医生在 `#/doctor` 输入姓名即可开始。所有人按同一顺序评阅相同的 A–D 报告，评分和评语分别保存。
+系统使用一个网站、两个入口。管理员通过密码进入 `#/admin`。公开研究的医生在 `#/radiologists` 输入姓名即可开始。所有人按同一顺序评阅相同的 A–D 报告，评分和评语分别保存。
 
 现有四模型包为每例保存了四篇双语报告。网站选取 `Reader01.zip` 的病例顺序和该病例的字母映射，冻结为全研究共用版本。字母所对应的模型可随病例变化。新研究默认编号 `BR4shared`，已有研究与历史评分继续使用原编号。
 
@@ -18,9 +18,9 @@
 
 4. 点 **Verify files**，核对 10 例和 40 份报告，勾选 **These cases and reports are approved for public sharing**。依次点 **Connect Google Drive → Choose folder → Upload and verify CTs**。管理员授权自己的 Drive 后，选择上一步的文件夹。影像上传成功后自动填入链接，点 **Publish study**。网页用免登录方式核对影像内容后才会开放研究。如果 Google 账号限制网页上传，也可手动上传 `External-Blind-Review-4Models-ZH\Web-Import-Local\Images` 中的十份 CT，再粘贴文件链接。
 5. 在管理员病例列表打开病例，可以修改病例显示名称或报告文本。医生提交这个病例的第一份评分后，该病例的报告会锁定。
-6. 把同一个[医生入口](https://jwang1402.github.io/ct-report-review/#/doctor)发给所有医生。填姓名后点 **Start review**，打开病例，网页自动读取 CT。医生可在三个切面查看影像并为旁边的报告评分。保存后刷新当前标签页可以继续，结束会话后不会通过输入姓名调出以往评分。管理员从 **Results** 按姓名查看或导出结果。
+6. 把同一个[医生入口](https://jwang1402.github.io/ct-report-review/#/radiologists)发给所有医生。填姓名后点 **Start review**，打开病例，网页自动读取 CT。医生可在三个切面查看影像并为旁边的报告评分。保存后刷新当前标签页可以继续，结束会话后不会通过输入姓名调出以往评分。管理员从 **Results** 按姓名查看或导出结果。
 
-对仅向指定医生开放的研究，在 **Restricted study options** 中选择账号模式并使用受限 Drive 文件夹。管理员可从 `#/admin/readers` 分配账号，医生从 `#/doctor/account` 登录。
+对仅向指定医生开放的研究，在 **Restricted study options** 中选择账号模式并使用受限 Drive 文件夹。管理员可从 `#/admin/readers` 分配账号，医生从 `#/radiologists/account` 登录。
 
 以下步骤用于首次部署和命令行导入。日常上传、编辑和分配可使用上面的网页流程。
 
@@ -112,7 +112,7 @@ foreach ($name in 'reader02','reader03','reader04','reader05') {
    git commit -m "Separate blinded physician review from administrator results"
    git push origin main
    ```
-3. 部署成功后，管理员入口为 `https://jwang1402.github.io/ct-report-review/#/admin`，所有医生共用 `https://jwang1402.github.io/ct-report-review/#/doctor`。公开阅片只需姓名。管理员在结果页查看每人的评分与真实模型。
+3. 部署成功后，管理员入口为 `https://jwang1402.github.io/ct-report-review/#/admin`，所有医生共用 `https://jwang1402.github.io/ct-report-review/#/radiologists`。公开阅片只需姓名。管理员在结果页查看每人的评分与真实模型。
 4. 本版本收集网页的 1–5 分及评语。如研究还收集重大漏报、无依据重要发现、侧别错误计数或同例偏好，可为每位医生单独复制一份来自 **Reader01** 的空白 CSV，并以账号区分回收文件，以保持字母与网页一致。
 
 GitHub Pages 发布应用代码。解盲表、研究包和含报告的临时 SQL 留在管理员侧。公开 CT 使用专用的只读 Drive 文件夹；受限研究使用各自的私有文件夹。停止公开阅片后，可在 Drive 另行收回影像共享。

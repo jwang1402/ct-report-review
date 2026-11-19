@@ -4,7 +4,7 @@ import {parseStudyPackets,type StudyPackets} from '../services/studyPackets';
 import {uploadStudy,type UploadProgress} from '../services/studyUpload';
 import {useStudyData} from '../services/blindStudy';
 import {message,sizeLabel} from '../utils';
-import {api} from '../services/session';
+import {api,radiologistsPath} from '../services/session';
 import {validateDriveLinks} from '../services/restrictedDrive';
 import {verifyPublicDriveCase} from '../services/publicDriveMedia';
 import DriveLinks from './DriveLinks';
@@ -90,7 +90,7 @@ export default function AdminUpload() {
   const validPrefix=/^[A-Za-z0-9][A-Za-z0-9_-]{0,39}$/.test(prefix);
   if(done)return <main className="page study-upload"><h1>{done==='published'?'Study published':'Study already published'}</h1>
     <p>{prefix} · {packets?.cases.length} cases</p>
-    <div className="actions"><Link className="button primary" to="/admin/cases">View cases</Link>{publicAccess&&<Link className="button secondary" to="/doctor" target="_blank" rel="noreferrer">Doctor review link</Link>}</div>
+    <div className="actions"><Link className="button primary" to="/admin/cases">View cases</Link>{publicAccess&&<Link className="button secondary" to={radiologistsPath} target="_blank" rel="noreferrer">Radiologist review link</Link>}</div>
   </main>;
   return <main className="page study-upload">
     <div className="page-heading"><div><h1>Upload Case</h1><p>Import CT volumes and their four anonymous reports.</p></div></div>
