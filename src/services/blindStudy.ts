@@ -5,11 +5,12 @@ import {message} from '../utils';
 export interface StudyListItem {case_id:string; case_name:string; scored:boolean;}
 export type Letter='A'|'B'|'C'|'D';
 export interface ReaderReport {letter:Letter; text:string; rating:number|null; comment:string;}
-export interface NamedReport {model_name:string; text:string;}
+export interface NamedReport {model_name:string; text:string; letter?:Letter;}
 export interface StudyDetail {
   case_id:string;
   case_name:string;
   revision?:string;
+  public_ct?:boolean;
   imaging:{type:'NIFTI';filename:string;size:number;drive_url?:string;sha256?:string};
   reports:(ReaderReport|NamedReport)[];
 }

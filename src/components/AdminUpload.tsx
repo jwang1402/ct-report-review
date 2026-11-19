@@ -9,6 +9,7 @@ import {validateDriveLinks} from '../services/restrictedDrive';
 import {verifyPublicDriveCase} from '../services/publicDriveMedia';
 import DriveLinks from './DriveLinks';
 import DriveFolderUpload from './DriveFolderUpload';
+import PublicStudyAccess from './PublicStudyAccess';
 
 const inputs=[
   {key:'images',label:'CT volumes',filename:'Reader_Images.zip'},
@@ -23,6 +24,7 @@ export default function AdminUpload() {
   const [links,setLinks]=useState<Record<string,string>>({});
   const [driveBusy,setDriveBusy]=useState(false);
   const [publicAccess,setPublicAccess]=useState(false);
+  const [restricted,setRestricted]=useState(false);
   const [prefix,setPrefix]=useState('BR4shared');
   const [packets,setPackets]=useState<StudyPackets|null>(null);
   const [busy,setBusy]=useState<'verify'|'upload'|null>(null);
@@ -58,6 +60,7 @@ export default function AdminUpload() {
   }
   async function publish() {
     if(!packets||operation.current||driveBusy||done||(source==='r2'&&!storage.data?.ready))return;
+    if(source==='drive'&&!publicAccess&&!restricted)return;
     const controller=new AbortController();
     operation.current=controller;
     setError('');setBusy('upload');
@@ -86,16 +89,15 @@ export default function AdminUpload() {
   const validPrefix=/^[A-Za-z0-9][A-Za-z0-9_-]{0,39}$/.test(prefix);
   if(done)return <main className="page study-upload"><h1>{done==='published'?'Study published':'Study already published'}</h1>
     <p>{prefix} · {packets?.cases.length} cases</p>
-    <div className="actions"><Link className="button primary" to="/admin">View cases</Link><Link className="button secondary" to="/admin/readers">Manage readers</Link></div>
+    <div className="actions"><Link className="button primary" to="/admin/cases">View cases</Link>{publicAccess&&<Link className="button secondary" to="/doctor" target="_blank" rel="noreferrer">Doctor review link</Link>}</div>
   </main>;
   return <main className="page study-upload">
-    <div className="page-heading"><div><h1>Upload study</h1><p>Import the CT volumes and four anonymous reports per case.</p></div></div>
-    <section className="work-card study-panel"><label>CT storage
-      <select value={source} disabled={!!busy||driveBusy} onChange={e=>{setSource(e.target.value as 'drive'|'r2');setPublicAccess(false);setProgress(null);setError('');setPhase('');}}>
+    <div className="page-heading"><div><h1>Upload Case</h1><p>Import CT volumes and their four anonymous reports.</p></div></div>
+    {storage.data?.ready&&<section className="work-card study-panel"><label>CT storage
+      <select value={source} disabled={!!busy||driveBusy} onChange={e=>{setSource(e.target.value as 'drive'|'r2');setPublicAccess(false);setRestricted(false);setProgress(null);setError('');setPhase('');}}>
         <option value="drive">Google Drive</option><option value="r2">Cloudflare R2</option>
       </select></label>
-      {source==='drive'&&<p>The browser checks the three ZIP files on this computer. The website stores reports and Drive links. CT files stay in your Drive.</p>}
-    </section>
+    </section>}
     {source==='r2'&&(storage.error?<p className="error" role="alert">Storage check failed. {storage.error} <button className="button secondary" onClick={storage.refresh}>Retry</button></p>
       :storage.data?.ready===false?<p className="study-storage-status" role="status">Activate private CT storage to publish. You can verify the files on this computer now. <button className="button secondary" onClick={storage.refresh}>Check again</button></p>
       :!storage.data?<p role="status">Checking private CT storage…</p>:null)}
@@ -104,7 +106,7 @@ export default function AdminUpload() {
         <strong>{input.label}</strong><small>{input.filename}</small>
         <input type="file" accept=".zip" disabled={!!busy||driveBusy} onChange={e=>{
           const file=e.target.files?.[0];
-          setFiles(f=>({...f,[input.key]:file}));setPackets(null);setPublicAccess(false);setLinks({});setProgress(null);setError('');setPhase('');
+          setFiles(f=>({...f,[input.key]:file}));setPackets(null);setPublicAccess(false);setRestricted(false);setLinks({});setProgress(null);setError('');setPhase('');
         }}/>
       </label>)}</div>
       {!packets&&<div className="actions"><button className="button secondary" disabled={!!busy||inputs.some(x=>!files[x.key])} onClick={()=>void verify()}>Verify files</button>
@@ -123,20 +125,24 @@ export default function AdminUpload() {
       {source==='drive'&&<>
         <section className="work-card study-panel"><h2>Public reader access</h2>
           <label className="reader-consent"><input type="checkbox" checked={publicAccess} disabled={!!busy||driveBusy}
-            onChange={e=>setPublicAccess(e.currentTarget.checked)}/>These cases and reports are approved for public sharing</label>
+            onChange={e=>{setPublicAccess(e.currentTarget.checked);setRestricted(false);}}/>These cases and reports are approved for public sharing</label>
           <p>Enabling access lets anyone with the doctor link enter a name, open the CT files and rate the anonymous reports.</p>
+          {!publicAccess&&<details><summary>Restricted study options</summary>
+            <label className="reader-consent"><input type="checkbox" checked={restricted} disabled={!!busy||driveBusy}
+              onChange={e=>setRestricted(e.currentTarget.checked)}/>Use assigned reader accounts for this study</label>
+          </details>}
         </section>
-        <DriveFolderUpload packets={packets} disabled={!!busy} allowPublic={publicAccess} links={links} onLinks={value=>{setLinks(value);setError('');}} onBusyChange={setDriveBusy}/>
-        <DriveLinks allowPublic={publicAccess} caseIds={packets.cases.map(c=>c.case_id)} links={links} setLinks={value=>{setLinks(value);setError('');}} disabled={!!busy||driveBusy}/>
+        {(publicAccess||restricted)&&<><DriveFolderUpload packets={packets} disabled={!!busy} allowPublic={publicAccess} links={links} onLinks={value=>{setLinks(value);setError('');}} onBusyChange={setDriveBusy}/>
+        <DriveLinks allowPublic={publicAccess} caseIds={packets.cases.map(c=>c.case_id)} links={links} setLinks={value=>{setLinks(value);setError('');}} disabled={!!busy||driveBusy}/></>}
       </>}
-      {!publicAccess&&<section className="work-card study-panel"><h2>Assign readers</h2>
+      {(restricted||source==='r2')&&<section className="work-card study-panel"><h2>Assign readers</h2>
         <p>All selected readers see the same cases and report letters. You can add readers after publishing.</p>
         {roster.error?<p role="alert" className="error">{roster.error} <button className="button secondary" onClick={roster.refresh}>Retry</button></p>
           :!roster.data?<p role="status">Loading readers…</p>:roster.data.doctors.length===0?<p>No doctor accounts yet.</p>
           :<div className="reader-checks">{roster.data.doctors.map(name=><label key={name}><input type="checkbox" disabled={!!busy} checked={doctors.includes(name)}
               onChange={e=>setDoctors(prev=>e.target.checked?[...prev,name]:prev.filter(user=>user!==name))}/>{name}</label>)}</div>}
       </section>}
-      <div className="study-submit"><button disabled={!!busy||driveBusy||!validPrefix||(source==='r2'&&!storage.data?.ready)} className="button primary" onClick={()=>void publish()}>{source==='drive'?(busy==='upload'?'Publishing…':'Publish study'):progress?'Resume and publish':'Upload and publish'}</button>
+      <div className="study-submit"><button disabled={!!busy||driveBusy||!validPrefix||(source==='r2'?!storage.data?.ready:!publicAccess&&!restricted)} className="button primary" onClick={()=>void publish()}>{source==='drive'?(busy==='upload'?'Publishing…':'Publish study'):progress?'Resume and publish':'Upload and publish'}</button>
         {busy==='upload'&&source==='r2'&&<button className="button secondary" onClick={()=>operation.current?.abort()}>Pause</button>}
         {progress&&<progress aria-label="CT upload progress" value={progress.bytes} max={volumeBytes}/>}
       </div>
@@ -144,5 +150,6 @@ export default function AdminUpload() {
       {publicAccess&&busy==='upload'&&phase&&<p role="status">{phase}</p>}
     </>}
     {error&&<p className="error" role="alert">{error}{progress&&' You can resume with the same files.'}</p>}
+    <details className="study-panel"><summary>Manage access to published studies</summary><PublicStudyAccess/></details>
   </main>;
 }

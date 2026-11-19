@@ -4,7 +4,7 @@ Doctors open `#/doctor`, enter their name and rate four anonymous reports per CT
 
 ## Prepare the study
 
-Follow [四模型盲审部署与病例导入](docs/BLIND_STUDY.md) to set up D1 and create the first administrator. For cases approved for public release, create a dedicated Google Drive folder with **Anyone with the link · Viewer**. On **Upload study**, verify the study archives, select the public-sharing option and publish. Readers see the same cases and A–D reports. Administrators can edit a case before its first rating. Private studies retain individual accounts and restricted Drive sharing.
+Follow [四模型盲审部署与病例导入](docs/BLIND_STUDY.md) to set up D1 and create the first administrator. For cases approved for public release, create a dedicated Google Drive folder with **Anyone with the link · Viewer**. On **Upload Case**, verify the study archives, confirm public sharing and publish. Readers see the same cases and A–D reports. Administrators can edit a case before its first rating. **Results** shows completed cases and individual ratings by reader. **Show model names** reveals the mapping for each case.
 
 ## Application
 

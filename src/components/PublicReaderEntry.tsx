@@ -1,5 +1,4 @@
 import {useEffect,useState,type FormEvent} from 'react';
-import {Link} from 'react-router-dom';
 import {ScanLine} from 'lucide-react';
 import {useStudyData} from '../services/blindStudy';
 import {joinReview,type Identity} from '../services/session';
@@ -23,6 +22,7 @@ export default function PublicReaderEntry({onStart}:{onStart:(user:Identity)=>vo
   }
   return <main className="login-page"><form className="form-card login-card" onSubmit={submit}>
     <ScanLine size={30}/><h1>CT Report Review</h1>
+    <p>Enter your name to start reviewing.</p>
     <label>Name<input autoComplete="name" maxLength={100} required value={name} onChange={e=>setName(e.currentTarget.value)}/></label>
     {studies.length>1&&<label>Study<select value={prefix} disabled={busy} onChange={e=>setSelected(e.currentTarget.value)}>
       {studies.map(s=><option value={s.prefix} key={s.prefix}>{s.prefix} ({s.case_count} cases)</option>)}
@@ -31,6 +31,5 @@ export default function PublicReaderEntry({onStart}:{onStart:(user:Identity)=>vo
       :!data?<p role="status">Loading studies…</p>:!studies.length?<p role="status">No studies are open for review yet.</p>:null}
     {error&&<p className="error" role="alert">{error}</p>}
     <button className="button primary full" disabled={busy||!prefix||!name.trim()}>{busy?'Opening…':'Start review'}</button>
-    <Link className="review-link" to="/doctor/account">Private study sign-in</Link>
   </form></main>;
 }

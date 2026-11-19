@@ -8,7 +8,7 @@
 
 1. 从[管理员入口](https://jwang1402.github.io/ct-report-review/#/admin)登录。首位管理员由项目所有者在下方的「建立管理员账号」步骤中创建。
 2. 为已获准公开分享的影像建立专用 Google Drive 文件夹，将常规访问权限设为「知道链接的任何人 · 查看者」，允许下载。文件夹只放匿名 CT，解盲包留在管理员电脑上。
-3. 管理员打开 **Upload study** 的 Google Drive 选项。从本地 `C:\MediLLM-main\test\baseline\MORPH-CT\results` 选择研究包：
+3. 管理员打开 **Upload Case**。从本地 `C:\MediLLM-main\test\baseline\MORPH-CT\results` 选择研究包：
 
    | 页面字段 | 选择文件 |
    |---|---|
@@ -20,7 +20,7 @@
 5. 在管理员病例列表打开病例，可以修改病例显示名称或报告文本。医生提交这个病例的第一份评分后，该病例的报告会锁定。
 6. 把同一个[医生入口](https://jwang1402.github.io/ct-report-review/#/doctor)发给所有医生。填姓名后点 **Start review**，打开病例，网页自动读取 CT。医生可在三个切面查看影像并为旁边的报告评分。保存后刷新当前标签页可以继续，结束会话后不会通过输入姓名调出以往评分。管理员从 **Results** 按姓名查看或导出结果。
 
-对仅向指定医生开放的研究，保持公开选项未勾选，并使用受限 Drive 文件夹。医生使用个人账号及获授权的 Google 账号；账号分配操作见下文。
+对仅向指定医生开放的研究，在 **Restricted study options** 中选择账号模式并使用受限 Drive 文件夹。管理员可从 `#/admin/readers` 分配账号，医生从 `#/doctor/account` 登录。
 
 以下步骤用于首次部署和命令行导入。日常上传、编辑和分配可使用上面的网页流程。
 

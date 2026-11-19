@@ -134,14 +134,19 @@ async function caseDetails(db, user, row) {
     ? db.prepare("SELECT a.letter,r.report_text AS text,a.rating,a.comment,COALESCE(v.revision,'initial') AS revision " +
         'FROM assignments a JOIN private_reports r USING(case_id,model_name) LEFT JOIN web_case_versions v ON v.case_id=a.case_id ' +
         'WHERE a.username=? AND a.case_id=? ORDER BY a.letter').bind(user.username, row.case_id)
-    : db.prepare('SELECT model_name,report_text AS text FROM private_reports WHERE case_id=? ORDER BY model_name')
+    : db.prepare('SELECT r.model_name,r.report_text AS text,s.letter FROM private_reports r '+
+        'LEFT JOIN shared_case_letters s USING(case_id,model_name) WHERE r.case_id=? ORDER BY s.letter,r.model_name')
       .bind(row.case_id);
   const {results} = await query.all();
+  const drive=driveImage(row.image_key);
+  const access=!doctor&&drive ? await db.prepare('SELECT enabled FROM public_studies WHERE prefix=?').bind(row.image_key.split('/')[1]).first() : null;
   return {
     case_id: row.case_id, case_name: doctor ? row.case_id : row.case_name,
     imaging: {type: 'NIFTI', filename: row.case_id + (row.image_filename.endsWith('.gz') ? '.nii.gz' : '.nii'), size: row.image_size,
-      ...driveImage(row.image_key)},
-    reports: doctor ? results.map(({revision,...report})=>report) : results,
+      ...drive},
+    ...(access?.enabled && {public_ct:true}),
+    reports: doctor ? results.map(({revision,...report})=>report) :
+      results.map(({letter,...report})=>letter ? {...report,letter} : report),
     ...(doctor && {revision:results[0]?.revision ?? 'initial'})
   };
 }

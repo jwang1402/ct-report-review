@@ -1,8 +1,9 @@
 import {lazy,Suspense} from 'react';
 import {HashRouter,Link,NavLink,Navigate,Route,Routes} from 'react-router-dom';
-import {ScanLine} from 'lucide-react';
+import {Activity,FolderOpen,Plus,ScanLine} from 'lucide-react';
 import {AuthGate, type Identity} from './components/AuthGate';
 import {BlindCase, StudyList} from './components/BlindCases';
+import StudyHome from './components/StudyHome';
 import {logout} from './services/session';
 
 const AdminResults=lazy(()=>import('./components/AdminResults'));
@@ -15,14 +16,13 @@ function Workspace({user}:{user:Identity}) {
   const isAdmin=user.role==='admin';
   const home=isAdmin?'/admin':'/doctor';
   return <>
-    <header className="header blind-header">
-      <Link className="brand" to={home}><span className="brand-icon"><ScanLine size={22}/></span>CT Report Review</Link>
+    <header className="header">
+      <Link className="brand" to={home}><span className="brand-icon"><ScanLine size={22}/></span><div>CT Report Review<small>CLINICAL RESEARCH</small></div></Link>
       <nav aria-label="Study">
-        <NavLink to={home} end>{isAdmin?'Cases':'Assigned cases'}</NavLink>
-        {isAdmin&&<NavLink to="/admin/upload">Upload study</NavLink>}
-        {isAdmin&&<NavLink to="/admin/readers">Readers</NavLink>}
-        {isAdmin&&<NavLink to="/admin/results">Results</NavLink>}
-        {isAdmin&&<NavLink to="/admin/archive">Previous reviews</NavLink>}
+        <NavLink to={home} end><ScanLine size={15}/>Home</NavLink>
+        <NavLink to={home+'/cases'}><FolderOpen size={15}/>Clinical Review</NavLink>
+        {isAdmin&&<NavLink to="/admin/upload"><Plus size={15}/>Upload Case</NavLink>}
+        {isAdmin&&<NavLink to="/admin/results"><Activity size={15}/>Results</NavLink>}
       </nav>
       <div className="header-end"><span>{user.display_name||user.username}</span><button className="button secondary"
         title={user.public_study?'End this review session before leaving a shared computer':undefined}
@@ -30,14 +30,17 @@ function Workspace({user}:{user:Identity}) {
     </header>
     <Suspense fallback={<p className="page" role="status">Loading…</p>}>
       <Routes>
-        <Route path={home} element={<StudyList role={user.role}/>}/>
+        <Route path={home} element={<StudyHome role={user.role}/>}/>
+        <Route path={home+'/cases'} element={<StudyList role={user.role}/>}/>
         <Route path={home+'/cases/:caseId'} element={<BlindCase role={user.role} publicReader={!!user.public_study}/>}/>
         {isAdmin&&<Route path="/admin/upload" element={<AdminUpload/>}/>}
         {isAdmin&&<Route path="/admin/readers" element={<DoctorAccounts/>}/>}
         {isAdmin&&<Route path="/admin/cases/:caseId/edit" element={<AdminCaseEditor/>}/>}
         {isAdmin&&<Route path="/admin/results" element={<AdminResults/>}/>}
         {isAdmin&&<Route path="/admin/archive" element={<LegacyWorkspace/>}/>}
-        {isAdmin&&<Route path="/results" element={<Navigate to="/admin/archive" replace/>}/>}
+        {isAdmin&&<Route path="/results" element={<Navigate to="/admin/results" replace/>}/>}
+        {isAdmin&&<Route path="/upload" element={<Navigate to="/admin/upload" replace/>}/>}
+        <Route path="/cases" element={<Navigate to={home+'/cases'} replace/>}/>
         <Route path="*" element={<Navigate to={home} replace/>}/>
       </Routes>
     </Suspense>

@@ -1,0 +1,23 @@
+.clinical-case .ct-file-prompt {
+  height: 100%;
+  display: grid;
+  align-content: center;
+  overflow: auto;
+  background: var(--surface);
+}
+.clinical-case .ct-file-prompt .actions { flex-wrap: wrap; justify-content: center; }
+.clinical-case .model-key-control { padding: 5px 13px; text-align: right; border-bottom: 1px solid var(--line); }
+.clinical-case .model-key-control button { background: transparent; border: 0; }
+.clinical-case .report-title h3 { overflow-wrap: anywhere; }
+.clinical-case .decision-panel .reviewer-group > p { color: var(--muted); margin: 10px 0; }
+.clinical-case .case-item strong { overflow-wrap: anywhere; }
+@media (max-width: 800px) {
+  .review-page.clinical-case { min-width: 0; height: auto; min-height: 0; }
+  .clinical-case > .review-layout { display: block !important; overflow: visible !important; }
+  .clinical-case .review-layout > [data-panel] { width: 100%; }
+  .clinical-case .review-layout > [data-panel]:first-child,
+  .clinical-case .review-layout > .resize-handle { display: none; }
+  .clinical-case .review-layout > [data-panel]:nth-child(3) { height: 65vh; min-height: 390px; }
+  .clinical-case .review-layout > [data-panel]:last-child { height: 85vh; min-height: 560px; }
+  .clinical-case .review-topbar { min-width: 0; flex-wrap: wrap; height: auto; min-height: 46px; }
+}

@@ -161,6 +161,10 @@ test('name-only readers are isolated, even with identical names, and only see an
   assert.equal((await api('/admin/results',null,second.token)).status,403);
   assert.equal((await api('/admin/public-studies',{prefix,enabled:true},second.token)).status,403);
   const path='/blind/cases/'+prefix+'-Case01';
+  const adminCase=await (await api(path,null,admin)).json();
+  assert.equal(adminCase.public_ct,true);
+  assert.deepEqual(adminCase.reports.map(r=>[r.letter,r.model_name]),sample.reports.map(r=>[r.letter,r.model_name]));
+  assert.equal((await (await api('/blind/cases/PrivateStudy-Case01',null,admin)).json()).public_ct,undefined);
   assert.equal((await api('/blind/cases/PrivateStudy-Case01',null,first.token)).status,404);
   const report=await (await api(path,null,first.token)).json();
   assert.deepEqual(report.reports.map(r=>r.letter),[...'ABCD']);

@@ -3,7 +3,8 @@ import type {StudyDetail} from '../services/blindStudy';
 import {driveFileId,verifyCaseVolume} from '../services/restrictedDrive';
 import {downloadPublicDriveCase} from '../services/publicDriveMedia';
 import {ViewerBoundary} from './ViewerBoundary';
-import {message} from '../utils';
+import {message,sizeLabel} from '../utils';
+import {ScanLine} from 'lucide-react';
 
 const Viewer=lazy(()=>import('./Viewer'));
 
@@ -38,8 +39,12 @@ export default function DriveCaseViewer({study,publicReader=false}:{study:StudyD
       if(!controller.signal.aborted)setError(message(e));
     } finally {if(!controller.signal.aborted)setChecking(false);}
   }
-  return <div className="drive-case-viewer">
-    <section className="work-card study-panel"><h2>CT image</h2>
+  if(file)return <ViewerBoundary><Suspense fallback={<div className="empty"><span className="spinner"/>Loading imaging engine…</div>}>
+    <Viewer privateCase verifiedFile={file} item={{case_id:study.case_id,imaging:study.imaging,asset:{size:study.imaging.size,url:''}}}/>
+  </Suspense></ViewerBoundary>;
+  return <div className="ct-file-prompt">
+    <section className="empty"><span className="empty-icon"><ScanLine size={32}/></span><h2>CT image</h2>
+      <small>{study.case_id} · NIfTI · {sizeLabel(size)}</small>
       {!publicReader&&<p>Download this case from Drive with your authorized Google account. Open the .nii.gz file here to view it alongside the reports.</p>}
       {publicReader&&checking&&<p role="status">Loading and checking this CT…</p>}
       {(!publicReader||error)&&<>
@@ -53,8 +58,5 @@ export default function DriveCaseViewer({study,publicReader=false}:{study:StudyD
       {!publicReader&&checking&&<p role="status">Checking the case file…</p>}
       {error&&<p className="error" role="alert">{error}</p>}
     </section>
-    {file&&<ViewerBoundary><Suspense fallback={<p role="status">Loading imaging engine…</p>}>
-      <Viewer privateCase verifiedFile={file} item={{case_id:study.case_id,imaging:study.imaging,asset:{size:study.imaging.size,url:''}}}/>
-    </Suspense></ViewerBoundary>}
   </div>;
 }
