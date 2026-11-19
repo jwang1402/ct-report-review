@@ -121,7 +121,7 @@ async function readSharedReports(coordinator: Map<string, FileEntry>, reader: Ma
       const model = key.get(id + '/' + letter);
       requireThat(model && blocks[i].startsWith(title), 'Missing or mismatched report letter in ' + id);
       const text = englishReport(blocks[i].slice(title.length));
-      requireThat(text, 'Missing the original English text for ' + id + ', Report ' + letter + '.');
+      requireThat(text, 'Missing original report text for ' + id + ', Report ' + letter + '.');
       return {letter, model_name: model, text};
     });
     requireThat(new Set(reports.map(r => r.model_name)).size === 4, 'Repeated model in ' + id);

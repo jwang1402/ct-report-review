@@ -22,7 +22,8 @@ function validateReports(reports) {
     check(r && letters.includes(r.letter) && validString(r.model_name,100) && validString(r.text,48000),
       400,'Each report needs a letter, a model and text.');
     const text=englishReport(r.text);
-    check(text&&!hasHan(r.model_name),400,'Provide the original English report text and a model name in English.');
+    check(text,400,`Provide the original text for report ${r.letter}.`);
+    check(!hasHan(r.model_name),400,`The model name for report ${r.letter} contains unsupported characters.`);
     return {letter:r.letter,model_name:r.model_name.trim(),text};
   }).sort((a,b)=>a.letter.localeCompare(b.letter));
   const models = new Set(sorted.map(r=>r.model_name.toLowerCase()));
@@ -62,7 +63,7 @@ function normalize(data,drive) {
   let modelSet;
   const cases = data.cases.map(c=>{
     check(c && typeof c.case_id==='string' && aliasPattern.test(c.case_id) && validString(c.case_name,120) && !hasHan(c.case_name) && !ids.has(c.case_id),
-      400,'Cases need distinct CaseNN aliases and a display name in English.');
+      400,'Give each case a unique CaseNN ID and a valid display name.');
     check(Number.isSafeInteger(c.size) && c.size>2 && c.size < 2*1024**3 && typeof c.sha256==='string' && /^[a-f0-9]{64}$/.test(c.sha256),
       400,'Invalid NIfTI size or SHA-256.');
     const reports=validateReports(Array.isArray(c.reports) ? c.reports.map(r=>({...r,model_name:displayNames.get(r?.model_name)??r?.model_name})) : c.reports);
@@ -311,7 +312,7 @@ async function saveEdit(db,id,data) {
   const current=await editor(db,id);
   check(!current.locked,409,'Ratings have already been submitted for this case.');
   check(data.revision===current.revision,409,'The report set changed. Reload before editing.');
-  check(validString(data.case_name,120)&&!hasHan(data.case_name),400,'Enter a case display name in English.');
+  check(validString(data.case_name,120)&&!hasHan(data.case_name),400,'Enter a valid case display name.');
   const name=data.case_name.trim();
   const reports=validateReports(data.reports);
   check(reports.every((r,i)=>r.model_name===current.reports[i].model_name && r.letter===current.reports[i].letter),

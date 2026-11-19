@@ -9,5 +9,5 @@ export function displayReaderName(name,id) {
 }
 
 export function displayComment(comment) {
-  return hasHan(comment)?'Comment available only in the original language.':comment;
+  return hasHan(comment)?'Saved comment cannot be displayed.':comment;
 }

@@ -41,11 +41,11 @@ function Editor({source,reload}:{source:EditorCase;reload:()=>void}) {
     <p>{saved.locked?'A reader has submitted ratings. The reviewed text and case name are locked.':'You can edit these reports until the first reader submits ratings for this case.'}</p>
     <label>Case name<input value={name} required maxLength={120} disabled={disabled} onChange={e=>{setName(e.target.value);setNotice('');}}/></label>
     {reports.map((r,i)=><label key={r.letter}><strong>Report {r.letter} · {r.model_name}</strong>
-      <textarea value={r.text} placeholder="Original report in English" rows={7} required maxLength={48000} disabled={disabled} onChange={e=>{
+      <textarea value={r.text} rows={7} required maxLength={48000} disabled={disabled} onChange={e=>{
         const text=e.target.value;setReports(prev=>prev.map((item,pos)=>pos===i?{...item,text}:item));setNotice('');
       }}/>
     </label>)}
-    {needsEnglish&&<p role="alert" className="error">Use English for the case name and report text.</p>}
+    {needsEnglish&&<p role="alert" className="error">{hasHan(name)?'The case name contains unsupported characters.':'The report text contains unsupported characters.'}</p>}
     <div className="actions">
       {!saved.locked&&<button className="button primary" disabled={disabled||!dirty||!valid}>{busy?'Saving…':'Save changes'}</button>}
       {stale&&<button type="button" className="button secondary" onClick={reload}>Reload saved version</button>}

@@ -65,7 +65,7 @@ function ReportFrame({caseId,items,selected,select,summary,children,control}:{ca
       {items.map(r=><TabsContent key={r.id} value={r.id} className="report-content">
         <span className="eyebrow">AI-GENERATED REPORT</span><div className="report-title"><h3>{r.label}</h3>
           <button className="icon-button" disabled={!r.text} title="Download Report" aria-label={'Download '+r.label} onClick={()=>saveFile(r.text,caseId+'-'+r.id+'.txt')}><Download size={16}/></button></div>
-        <div className="report-text" style={{fontSize:font}}>{r.text||'The English report is unavailable. Please contact the study coordinator.'}</div>
+        <div className="report-text" style={{fontSize:font}}>{r.text||'This report is unavailable. Please contact the study coordinator.'}</div>
       </TabsContent>)}</Tabs>
     <button className="review-collapse" aria-expanded={!hidden} aria-controls="review-body" onClick={()=>setHidden(v=>!v)}>{hidden?'▲ Show reviews':'▼ Hide reviews'}</button>
     <div id="review-body" className="review-body" hidden={hidden}>{children}</div>
@@ -112,8 +112,8 @@ function DoctorReports({id,reports,revision,reload,onSaved}:{id:string;reports:R
           </label>)}</div>
           <div className="quality-rating-caption">{draft.rating?'Selected: '+decisionLabels[String(draft.rating) as typeof ratings[number]]:'Select a score from 1 · Poor to 5 · Excellent'}</div>
         </fieldset>
-        <label>Comment (optional)<textarea value={draft.comment??''} placeholder={draft.comment===null?'A previous comment is saved. Type in English to replace it.':'Write in English'} disabled={busy} maxLength={10000} rows={3} onChange={e=>edit({comment:e.target.value})}/></label>
-        <p role="status">{notice||(missingOriginal?'Ratings can be submitted when all four English reports are available.':complete+' / 4 reports ready. Switch report tabs to review each report.')}</p>
+        <label>Comment (optional)<textarea value={draft.comment??''} placeholder={draft.comment===null?'A previous comment is saved. Type here to replace it.':undefined} disabled={busy} maxLength={10000} rows={3} onChange={e=>edit({comment:e.target.value})}/></label>
+        <p role="status">{notice||(missingOriginal?'Ratings can be submitted when all four reports are available.':complete+' / 4 reports ready. Switch report tabs to review each report.')}</p>
         <button className="button primary full" disabled={outdated||busy||!dirty||complete!==4||missingOriginal} onClick={()=>void submit()}>{busy?'Saving…':'Save four ratings'}</button>
       </section>
       {error&&<p role="alert" className="error">{error}</p>}{outdated&&<button className="button secondary" onClick={reload}>Reload updated reports and rate again</button>}

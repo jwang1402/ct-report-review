@@ -171,13 +171,13 @@ async function saveRatings(db, username, id, data) {
         || (entry.comment!==null && (typeof entry.comment !== 'string' || entry.comment.length > 10000))) {
       throw new HttpError(400, 'Each report needs a unique letter and a score from 1 to 5.');
     }
-    if(hasHan(entry.comment))throw new HttpError(400,'Write your review comment in English.');
+    if(hasHan(entry.comment))throw new HttpError(400,`The comment for report ${entry.letter} contains unsupported characters. Edit or clear it to submit your ratings.`);
     byLetter.set(entry.letter,entry);
   }
   const stamp = new Date().toISOString();
   const originals=await db.prepare('SELECT report_text FROM private_reports WHERE case_id=?').bind(id).all();
   if(originals.results.length!==4 || originals.results.some(r=>!englishReport(r.report_text))) {
-    throw new HttpError(409,'An English report is unavailable. Contact the study coordinator before rating this case.');
+    throw new HttpError(409,'A report is unavailable. Contact the study coordinator before rating this case.');
   }
   // One transaction for the four reports. A retry with unchanged data preserves its timestamp.
   const writes=letters.map(letter => {

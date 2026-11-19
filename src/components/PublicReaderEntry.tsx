@@ -22,7 +22,6 @@ export default function PublicReaderEntry({onStart}:{onStart:(user:Identity)=>vo
   }
   return <main className="login-page"><form className="form-card login-card" onSubmit={submit}>
     <ScanLine size={30}/><h1>CT Report Review</h1>
-    <p>Enter your name in Latin letters to start reviewing.</p>
     <label>Name<input autoComplete="name" maxLength={100} required value={name} onChange={e=>setName(e.currentTarget.value)}/></label>
     {studies.length>1&&<label>Study<select value={prefix} disabled={busy} onChange={e=>setSelected(e.currentTarget.value)}>
       {studies.map(s=><option value={s.prefix} key={s.prefix}>{s.prefix} ({s.case_count} cases)</option>)}
