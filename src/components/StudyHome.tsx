@@ -3,23 +3,26 @@ import {Link} from 'react-router-dom';
 import {useStudyData,type StudyListItem} from '../services/blindStudy';
 import type {Identity} from '../services/session';
 import {CaseTable} from './BlindCases';
+import {isStudyACase} from '../services/studyDisplay';
 
 export default function StudyHome({role}:{role:Identity['role']}) {
   const admin=role==='admin';
   const {data,error,refresh}=useStudyData<{cases:StudyListItem[]}>('/blind/cases');
   const cases=data?.cases;
-  return <main className="page home-page">
+  const studyATitle=cases?.length&&cases.every(c=>isStudyACase(c.case_id))?'Study A':'Reader workspace';
+  return <main className={'page home-page'+(admin?'':' reader-home')}>
     <div className="page-heading"><div>
-      <span className="eyebrow">CLINICAL EVALUATION WORKSPACE</span>
-      <h1>CT Report Review</h1><p>Clinical evaluation of AI-generated reports against CT imaging data</p>
+      {admin?<><span className="eyebrow">CLINICAL EVALUATION WORKSPACE</span>
+        <h1>CT Report Review</h1><p>Clinical evaluation of AI-generated reports against CT imaging data</p></>:
+        <h1>{studyATitle}</h1>}
     </div>{admin&&<Link className="button primary" to="/admin/upload"><Plus size={16}/>Upload Case</Link>}</div>
     <div className="summary-strip">
-      <div><ScanLine/><span>Published cases<strong>{cases?.length??'—'}</strong></span></div>
-      <div><FileText/><span>Model reports<strong>{cases?cases.reduce((sum,c)=>sum+(c.report_count??4),0):'—'}</strong></span></div>
-      <div><Check/><span>{admin?'Fully reviewed cases':'Cases you reviewed'}<strong>{cases?.filter(c=>c.scored).length??'—'}</strong></span></div>
+      <div><ScanLine/><span>{admin?'Published cases':'Cases'}<strong>{cases?.length??'—'}</strong></span></div>
+      <div><FileText/><span>{admin?'Model reports':'Reports'}<strong>{cases?cases.reduce((sum,c)=>sum+(c.report_count??4),0):'—'}</strong></span></div>
+      <div><Check/><span>{admin?'Fully reviewed cases':'Cases reviewed'}<strong>{cases?.filter(c=>c.scored).length??'—'}</strong></span></div>
     </div>
     <section className="work-card">
-      <div className="section-heading"><h2>Case workspace</h2><span className="muted">Published studies</span>
+      <div className="section-heading"><h2>Case workspace</h2>{admin&&<span className="muted">Published studies</span>}
         <button className="button secondary push-right" disabled={!data&&!error} onClick={refresh}><RefreshCw size={14}/>Refresh Cases</button>
       </div>
       {error?<p className="global-error" role="alert">{error}</p>:cases?<CaseTable role={role} cases={cases} compact={admin} scrollable={!admin}/>:

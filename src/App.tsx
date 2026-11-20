@@ -16,8 +16,8 @@ function Workspace({user}:{user:Identity}) {
   const isAdmin=user.role==='admin';
   const home=workspaceHome(user.role);
   return <>
-    <header className="header">
-      <Link className="brand" to={home}><span className="brand-icon"><ScanLine size={22}/></span><div>CT Report Review<small>CLINICAL RESEARCH</small></div></Link>
+    <header className={isAdmin?'header':'header reader-nav'}>
+      <Link className="brand" to={home}><span className="brand-icon"><ScanLine size={22}/></span><div>CT Report Review{isAdmin&&<small>CLINICAL RESEARCH</small>}</div></Link>
       <nav aria-label="Study">
         <NavLink to={home} end><ScanLine size={15}/>Home</NavLink>
         {isAdmin&&<NavLink to="/admin/cases"><FolderOpen size={15}/>Clinical Review</NavLink>}

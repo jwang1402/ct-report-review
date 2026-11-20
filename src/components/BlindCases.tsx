@@ -15,6 +15,7 @@ import {caseDisplayLabel,isStudyACase} from '../services/studyDisplay';
 import {ResizablePanel,ResizablePanelGroup,ResizableHandle} from './Resizable';
 import type {Identity} from './AuthGate';
 import './CaseWorkspace.css';
+import './StudyAWorkspace.css';
 
 const Viewer=lazy(()=>import('./Viewer'));
 type Role=Identity['role'];
@@ -139,7 +140,8 @@ export function BlindCase({role,publicReader=false}:{role:Role;publicReader?:boo
   if(role==='doctor'?!validDoctor:!adminReports.length){
     return <main className="page"><Link to={back}>Back to cases</Link><p role="alert">The case assignment could not be loaded.</p></main>;
   }
-  return <main className="review-page clinical-case">
+  const readerStudyA=role==='doctor'&&studyA;
+  return <main className={'review-page clinical-case'+(readerStudyA?' study-a-workspace':'')}>
     <div className="review-topbar"><Link to={back} className="icon-button" aria-label="Back to cases"><ArrowLeft size={18}/></Link>
       <span className="case-id">{caseDisplayLabel(data.case_id)}</span>{!isStudyACase(data.case_id)&&data.case_name!==data.case_id&&<strong>{data.case_name}</strong>}<span className="format-badge">NIfTI</span>
       <span className="muted push-right">{data.reports.length} model reports</span>

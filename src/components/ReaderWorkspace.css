@@ -1,0 +1,94 @@
+.reader-entry {
+  background: #edf2f7;
+  padding: clamp(16px, 4vw, 48px);
+}
+.reader-entry .reader-entry-card {
+  width: min(100%, 426px);
+  gap: 20px;
+  padding: 0 30px 30px;
+  margin: 0;
+  border: 1px solid #c8d5e2;
+  border-radius: 14px;
+  box-shadow: 0 10px 30px #192f4c0e;
+}
+.reader-entry-heading {
+  margin: 0 -30px 4px;
+  padding: 28px 30px;
+  background: #192f4c;
+  color: white;
+}
+.reader-entry-heading > svg { color: #b4cde8; margin-bottom: 19px; }
+.reader-entry .reader-entry-heading h1 { font-size: 30px; color: inherit; font-weight: 600; }
+.reader-entry .reader-entry-heading p {
+  display: flex; gap: 9px; align-items: baseline;
+  margin: 8px 0 0; color: #d4dfec; font-size: 14px;
+}
+.reader-entry-heading strong { font-weight: 600; }
+.reader-entry .reader-entry-card label { color: #213c60; font-size: 14px; font-weight: 600; }
+.reader-entry .reader-entry-card input { min-height: 44px; }
+.reader-entry .reader-entry-card .primary {
+  min-height: 44px; background: #213c60; border-color: #213c60; font-size: 14px;
+}
+.reader-entry .reader-entry-card .primary:enabled:hover { background: #172e4d; }
+
+.header.reader-nav {
+  height: 58px;
+  padding-inline: clamp(16px, 3vw, 42px);
+  gap: clamp(18px, 3vw, 46px);
+  background: #192f4c;
+  color: #fff;
+  border-bottom: 1px solid #243f5d;
+  box-shadow: none;
+}
+.reader-nav .brand { font-size: 17px; font-weight: 600; color: inherit; }
+.reader-nav .brand-icon { color: #e0edfb; background: #294562; border-color: #486583; }
+.reader-nav nav a { color: #d4deeb; font-weight: 500; }
+.reader-nav nav a.active { color: white; border-color: #b5d0eb; }
+.reader-nav .header-end { min-width: 0; gap: 13px; color: #d4deeb; }
+.reader-nav .header-end > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.reader-nav .header-end button { color: #fff; background: transparent; border-color: #60768f; min-height: 32px; }
+.reader-nav .header-end button:hover { background: #294562; }
+.reader-nav :is(button, a):focus-visible { outline-color: #c1defa; }
+
+.home-page.reader-home {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: clamp(24px, 3.6vw, 52px) clamp(16px, 3vw, 40px);
+}
+.reader-home .page-heading { margin-bottom: 20px; }
+.reader-home h1 { color: #192f4c; font-size: clamp(30px, 4vw, 42px); letter-spacing: -.035em; }
+.reader-home .summary-strip {
+  display: grid; grid-template-columns: repeat(3,minmax(0,1fr));
+  margin-bottom: 24px; background: #fff; border-radius: 10px; border-color: #ccd8e4;
+}
+.home-page.reader-home .summary-strip > div { padding: 18px clamp(10px, 2vw, 24px); gap: 15px; }
+.reader-home .summary-strip > div + div::before { height: 38px; margin-top: 0; top: 50%; transform: translateY(-50%); }
+.reader-home .summary-strip svg { color: #4b6788; }
+.reader-home .summary-strip span { font-size: 13px; }
+.reader-home .summary-strip strong { margin-top: 2px; font-size: 28px; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.reader-home .work-card { border: 1px solid #ccd8e4; border-radius: 10px; }
+.home-page.reader-home .work-card > .section-heading { padding: 14px clamp(12px, 2vw, 24px); }
+.reader-home .case-workspace-scroll thead th { background: #eff4f8; color: #455c78; font-weight: 650; }
+.reader-home .case-workspace-scroll tbody tr:hover,
+.reader-home .case-workspace-scroll tbody tr:focus-within { background: #f2f6fb; }
+.reader-home .case-title strong { font-weight: 650; color: #1f395b; }
+.reader-home .case-title small { font-family: inherit; letter-spacing: .01em; }
+.reader-home .review-link { color: #1e4274; font-weight: 650; }
+
+@media (max-width: 720px) {
+  .header.reader-nav { flex-wrap: wrap; height: auto; min-height: 52px; padding-block: 10px; gap: 8px 14px; }
+  .reader-nav .header-end { max-width: 48%; margin-left: auto; gap: 7px; }
+  .reader-nav .header-end button { flex-shrink: 0; white-space: nowrap; }
+  .reader-nav nav { width: auto; height: auto; order: 0; align-items: stretch; }
+  .reader-nav nav a { padding: 6px 2px; }
+  .reader-home .summary-strip span { font-size: 12px; }
+  .home-page.reader-home .summary-strip > div { padding-block: 12px; }
+  .reader-home .summary-strip strong { font-size: 24px; }
+}
+@media (max-width: 480px) {
+  .header.reader-nav { display: grid; grid-template-columns: auto minmax(0, 1fr); }
+  .header.reader-nav nav { display: none; }
+  .reader-nav .brand { gap: 7px; font-size: 15px; }
+  .reader-nav .brand-icon { width: 30px; height: 30px; }
+  .reader-nav .header-end { width: 100%; max-width: none; justify-content: flex-end; }
+}

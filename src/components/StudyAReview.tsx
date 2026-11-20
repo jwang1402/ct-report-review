@@ -103,7 +103,7 @@ export function StudyAReview({id,reports,revision,reload,onSaved}:{id:string;rep
     if(editor?.index===undefined)errors.push(row);else errors[editor.index]=row;
     patch({mode:'yes',errors,confirmed:false});setEditor(null);
   }
-  return <ReportFrame caseId={id} selected={letter} select={changeReport}
+  return <ReportFrame readingMode caseId={id} selected={letter} select={changeReport}
     items={reports.map(r=>({id:r.letter,label:'Report '+r.letter+(saved[r.letter]?' ✓':''),text:r.text}))} summary={reviewed+' / 3 reviewed'}>
     <div className="study-a-review">
       <section><div className="study-a-section-heading"><h3>Reported findings</h3><div className="study-a-buttons" aria-label="Filter findings">

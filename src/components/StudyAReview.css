@@ -1,31 +1,37 @@
-.study-a-review{font-size:13px;color:#213c60;min-width:0}
-.study-a-review>section{padding:15px 17px;border-bottom:1px solid var(--line)}
+.study-a-review{font-size:14px;color:#213c60;min-width:0}
+.study-a-review>section{padding:16px var(--reader-gutter,17px);border-bottom:1px solid var(--line)}
 .study-a-review h3,.study-a-review legend,.study-a-error-dialog h2{margin:0;font-weight:650}
 .study-a-section-heading,.study-a-submit,.study-a-errors li{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
-.study-a-buttons{display:flex;gap:5px;flex-wrap:wrap}
+.study-a-buttons{display:flex;gap:6px;flex-wrap:wrap}
 .study-a-buttons button,.study-a-table button{background:white;border:1px solid #c5d3e0;color:#244365;border-radius:5px;font-size:12px;padding:6px 8px;line-height:1.25}
-.study-a-buttons button[aria-pressed=true]{background:#e6eff8;border-color:#6586a2;color:#183d60;font-weight:650}
+.study-a-buttons button[aria-pressed=true]{background:#e7eff9;border-color:#9bb2cb;color:#1e4274;font-weight:650}
+.study-a-buttons button:not(:disabled):hover,.study-a-table button:not(:disabled):hover{border-color:#819dbb;background:#edf3fa}
+.study-a-section-heading h3,.study-a-review .quality-rating legend{font-size:15px;font-weight:650;color:#213c60}
 .study-a-review .study-a-hint{margin:7px 0 8px;color:#586f85;font-size:12px;line-height:1.45}
-.study-a-table{max-height:185px;overflow:auto;border:1px solid var(--line);border-radius:6px}
+.study-a-table{max-height:clamp(176px,24vh,235px);overflow:auto;border:1px solid #ccd9e6;border-radius:7px;scrollbar-gutter:stable}
 .study-a-table table{width:100%;border-collapse:collapse;text-align:left;font-size:13px}
-.study-a-table th,.study-a-table td{padding:6px 8px;height:auto;letter-spacing:normal;text-transform:none}
-.study-a-table th{position:sticky;top:0;background:#f0f5fa;z-index:1}
+.study-a-table th,.study-a-table td{padding:6px 10px;height:auto;font-size:13px;line-height:1.45;letter-spacing:normal;text-transform:none}
+.study-a-table th{position:sticky;top:0;background:#eff4f9;z-index:1;font-weight:650;font-size:12px}
+.study-a-table tbody tr:nth-child(even){background:#f8fafc}
 .study-a-table td:nth-child(2),.study-a-table th:nth-child(2){text-align:center}
 .study-a-table button{white-space:nowrap;padding:3px 6px}
-.study-a-positive{color:var(--status-ink);font-weight:650}
+.study-a-positive{display:inline-block;min-width:33px;border-radius:4px;padding:1px 5px;color:#1e4274;background:#e4edf9;font-weight:650;font-variant-numeric:tabular-nums}
 .study-a-field{border:0;padding:0;margin:0;min-width:0}
 .study-a-field legend{margin-bottom:8px;padding:0;font-size:14px}
 .study-a-errors{list-style:none;margin:8px 0;padding:0}
 .study-a-errors li{background:#f4f8fb;border:1px solid var(--line);border-radius:6px;padding:8px;margin-top:6px}
 .study-a-errors li>div:first-child{min-width:0;overflow-wrap:anywhere}
 .study-a-errors li strong,.study-a-errors li span,.study-a-errors li small{display:block;line-height:1.45}
-.study-a-review .quality-rating{margin:0 0 13px}.study-a-review .quality-rating-choice{min-height:51px;padding:5px 1px;gap:3px}
+.study-a-review .quality-rating{margin:0 0 13px}.study-a-review .quality-rating-choice{min-height:54px;padding:6px 2px;gap:4px;border-radius:6px}
+.study-a-review .quality-rating .quality-rating-choice.chosen{color:#fff;border-color:#1e4274;background:#1e4274;box-shadow:none}
+.study-a-review .quality-rating .rating-description{white-space:normal}
+.study-a-review .quality-rating:disabled .quality-rating-choice.chosen{opacity:1}
 .study-a-review .quality-rating-choice .rating-number{font-size:17px}
 .study-a-comment{margin:8px 0 12px}.study-a-comment summary{cursor:pointer;font-size:13px}
 .study-a-comment textarea{margin-top:6px;width:100%;resize:vertical}
 .study-a-review label.study-a-confirm{display:flex;align-items:center;gap:8px;margin:0;font-size:13px;font-weight:500}
 .study-a-confirm input{width:16px;height:16px;margin:0;accent-color:#254e73}
-.study-a-submit{padding:10px 17px;background:#f8fbfd}.study-a-submit span{font-size:12px}
+.study-a-submit{padding:13px var(--reader-gutter,17px);background:#f4f7fb}.study-a-submit span{font-size:13px}
 .study-a-review>p.error{margin:8px 17px}
 .study-a-error-dialog{color:#213c60;background:white;border:1px solid #b8cad9;border-radius:12px;padding:22px;max-height:calc(100dvh - 36px);overflow-y:auto;width:min(440px,91vw)}
 .study-a-error-dialog::backdrop{background:#13233575}
