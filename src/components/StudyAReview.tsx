@@ -24,7 +24,7 @@ function ErrorForm({editor,original,save,close}:{editor:ErrorEditor;original?:Fi
   }
   return <dialog ref={dialog} className="study-a-error-dialog" aria-labelledby="study-error-title" onCancel={close}>
     <form onSubmit={submit}><h2 id="study-error-title">{original?'Edit error':'Add error'}</h2>
-      <label>Finding<select required value={finding} onChange={e=>setFinding(e.target.value as typeof finding)}>
+      <label>Finding<select aria-label="Finding" required value={finding} onChange={e=>setFinding(e.target.value as typeof finding)}>
         <option value="">Select…</option>{findings.map(f=><option value={f} key={f}>{findingNames[f]}</option>)}
         <option value="other">Other clinically important finding</option>
       </select></label>
