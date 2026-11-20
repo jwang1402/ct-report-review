@@ -1,3 +1,4 @@
+import {caseDisplayLabel} from '../services/studyDisplay';
 import {lazy,Suspense,useEffect,useRef,useState} from 'react';
 import type {StudyDetail} from '../services/blindStudy';
 import {driveFileId,verifyCaseVolume} from '../services/restrictedDrive';
@@ -51,7 +52,7 @@ export default function DriveCaseViewer({study,publicReader=false}:{study:StudyD
   </Suspense></ViewerBoundary>;
   return <div className="ct-file-prompt">
     <section className="empty"><span className="empty-icon"><ScanLine size={32}/></span><h2>CT image</h2>
-      <small>{study.case_id} · NIfTI · {sizeLabel(size)}</small>
+      <small>{caseDisplayLabel(study.case_id)} · NIfTI · {sizeLabel(size)}</small>
       {!publicReader&&<p>Download this case from Drive with your authorized Google account. Open the .nii.gz file here to view it alongside the reports.</p>}
       {progress?.stage==='download'&&<CTLoadProgress label={progress.reconnecting?'Reconnecting to CT…':'Downloading CT'}
         ratio={progress.total>0?progress.received/progress.total:undefined}

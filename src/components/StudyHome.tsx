@@ -15,7 +15,7 @@ export default function StudyHome({role}:{role:Identity['role']}) {
     </div>{admin&&<Link className="button primary" to="/admin/upload"><Plus size={16}/>Upload Case</Link>}</div>
     <div className="summary-strip">
       <div><ScanLine/><span>Published cases<strong>{cases?.length??'—'}</strong></span></div>
-      <div><FileText/><span>Model reports<strong>{cases?cases.length*4:'—'}</strong></span></div>
+      <div><FileText/><span>Model reports<strong>{cases?cases.reduce((sum,c)=>sum+(c.report_count??4),0):'—'}</strong></span></div>
       <div><Check/><span>{admin?'Fully reviewed cases':'Cases you reviewed'}<strong>{cases?.filter(c=>c.scored).length??'—'}</strong></span></div>
     </div>
     <section className="work-card">

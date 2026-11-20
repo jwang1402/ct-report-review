@@ -3,6 +3,7 @@ import {Link} from 'react-router-dom';
 import {useStudyData} from '../services/blindStudy';
 import {api,radiologistsPath} from '../services/session';
 import {message} from '../utils';
+import {studyDisplayName} from '../services/studyDisplay';
 import './DoctorAccounts.css';
 import PublicStudyAccess from './PublicStudyAccess';
 
@@ -39,7 +40,7 @@ export default function DoctorAccounts() {
     setBusy('assign'); setError(''); setFeedback('');
     try {
       const result = await api('/admin/enrollment',{method:'POST',body:JSON.stringify({username:reader,prefix})});
-      setFeedback(reader+' can now review '+result.case_count+' cases in '+prefix+'.');
+      setFeedback(reader+' can now review '+result.case_count+' cases in '+studyDisplayName(prefix)+'.');
     } catch (e) { setError(message(e)); }
     finally { setBusy(null); }
   }
@@ -61,7 +62,7 @@ export default function DoctorAccounts() {
           <option value="">Choose a reader</option>{doctors.data?.doctors.map(name=><option key={name}>{name}</option>)}
         </select></label>
         <label>Study<select required value={prefix} onChange={e=>setPrefix(e.target.value)}>
-          <option value="">Choose a study</option>{studies.data?.studies.map(s=><option value={s.prefix} key={s.prefix}>{s.prefix} ({s.case_count} cases)</option>)}
+          <option value="">Choose a study</option>{studies.data?.studies.map(s=><option value={s.prefix} key={s.prefix}>{studyDisplayName(s.prefix)} ({s.case_count} cases)</option>)}
         </select></label>
         {studies.data?.studies.length===0&&<p><Link to="/admin/upload">Import the first study</Link></p>}
         <button className="button secondary" disabled={!!busy||!reader||!prefix}>{busy==='assign'?'Assigning…':'Assign cases'}</button>

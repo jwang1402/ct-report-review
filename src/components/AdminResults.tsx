@@ -6,6 +6,7 @@ import {decisionLabels,ratings,type Rating} from '../types';
 import {message,saveFile} from '../utils';
 import {api,ResponseError} from '../services/session';
 import {compareCaseIds} from '../services/caseOrder';
+import StudyAResults from './StudyAResults';
 import './AdminResults.css';
 
 type RosterEntry={username:string;display_name:string|null;version:string};
@@ -53,6 +54,17 @@ function ConfirmDeleteReader({name,busy,error,cancel,confirm}:{name:string;busy:
 }
 
 export default function AdminResults() {
+  const [view,setView]=useState<'study-a'|'legacy'>('study-a');
+  return <main className="page">
+    <nav className="admin-results-switch" aria-label="Results protocol">
+      <button type="button" aria-pressed={view==='study-a'} onClick={()=>setView('study-a')}>Study A</button>
+      <button type="button" aria-pressed={view==='legacy'} onClick={()=>setView('legacy')}>Previous ratings</button>
+    </nav>
+    {view==='study-a'?<StudyAResults DeleteDialog={ConfirmDeleteReader}/>:<LegacyResults/>}
+  </main>;
+}
+
+function LegacyResults() {
   const {data,error,refresh}=useStudyData<{results:StudyResult[];readers?:RosterEntry[]}>('/admin/results');
   const [reader,setReader]=useState('');
   const [revealed,setRevealed]=useState(false);
@@ -95,8 +107,8 @@ export default function AdminResults() {
       }else setDeleteError(message(err));
     } finally {setDeleting(false);}
   }
-  return <main className="page">
-    <div className="page-heading"><div><h1>Review results</h1><p>Findings quality ratings: 1 = Poor, 5 = Excellent.</p></div>
+  return <>
+    <div className="page-heading"><div><h1>Previous ratings</h1><p>Four-report reviews · Findings quality, 1–5</p></div>
       <div className="actions">
         <button className="button secondary" onClick={refresh}><RefreshCw size={15}/> Refresh Reviews</button>
         <button className="button secondary" disabled={!visible.length} aria-pressed={revealed} onClick={()=>setRevealed(s=>!s)}>
@@ -139,5 +151,5 @@ export default function AdminResults() {
           </tr>)}</tbody></table></div>
         </section>)}
       </>}
-  </main>;
+  </>;
 }

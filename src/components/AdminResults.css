@@ -2,3 +2,12 @@
 .reader-delete-dialog p { margin-top: 1rem; }
 .reader-delete-dialog::backdrop { background: #14325166; }
 .reader-delete-dialog .button.delete-reader { color: white; background: #a02d28; border-color: #a02d28; }
+.admin-results-switch { display:inline-flex; gap:4px; padding:3px; border:1px solid var(--line); border-radius:7px; margin-bottom:22px; }
+.admin-results-switch button { padding:7px 12px; font:inherit; background:white; color:var(--muted); border:1px solid transparent; border-radius:4px; cursor:pointer; }
+.admin-results-switch button[aria-pressed=true] { background:var(--soft,#edf3f8); color:var(--ink,#213c60); border-color:#cad6e3; font-weight:600; }
+.study-a-tools { display:flex; align-items:end; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+.study-a-counts { grid-template-columns:repeat(3,minmax(0,1fr)); }
+.admin-study-errors { margin:8px 0; padding-left:18px; min-width:150px; }
+.admin-study-errors li { margin-bottom:6px; }
+.admin-study-errors strong { text-transform:capitalize; }
+@media(max-width:600px) { .study-a-tools .actions { flex-wrap:wrap; } .study-a-counts { grid-template-columns:1fr; } }

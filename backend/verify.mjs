@@ -35,6 +35,70 @@ function call(env,path,data,token,origin='https://jwang1402.github.io') {
     ...(data?{body:JSON.stringify(data)}:{})}),env);
 }
 
+test('Study A retains the original key and scores, binds 18 findings to the displayed report, and saves one blinded review at a time',async t=>{
+  const {db,env}=fixture();
+  t.after(()=>db.close());
+  db.exec('PRAGMA foreign_keys=ON');
+  const id='BR4shared-Case01', url='/blind/cases/'+id, users=['reader-one','reader-two','coordinator'];
+  const models=['M3D-LaMed-Phi-3-4B','BTB3D-16','MORPH-CT','CT-CHAT-8B'];
+  const labels=Object.fromEntries(('cardiomegaly hiatal_hernia pericardial_effusion lymphadenopathy lung_nodule emphysema '+
+    'interlobular_septal_thickening consolidation atelectasis lung_opacity pulmonary_fibrotic_sequela bronchiectasis '+
+    'pleural_effusion mosaic_attenuation_pattern arterial_wall_calcification peribronchial_thickening medical_material coronary_artery_wall_calcification').split(' ').map(k=>[k,0]));
+  const sql=(q,...args)=>db.prepare(q).run(...args);
+  for (const u of users){
+    const role=u==='coordinator'?'admin':'doctor';
+    sql('INSERT INTO accounts VALUES(?,?,?,?)',u,role,'salt','hash');
+    sql('INSERT INTO account_sessions VALUES(?,?,?,?,?)',await digest(u),u,role,'hash',2**31-1);
+  }
+  sql('INSERT INTO private_cases VALUES(?,?,?,?,?)',id,'Study case','fixture','image.nii.gz',42);
+  for(const [i,m] of models.entries()){
+    const letter='ABCD'[i], text='Original report '+i;
+    sql('INSERT INTO private_reports VALUES(?,?,?)',id,m,text);
+    sql('INSERT INTO shared_case_letters VALUES(?,?,?,?)',id,letter,m,1);
+    for(const u of users.slice(0,2))sql('INSERT INTO assignments(username,case_id,letter,model_name,case_order,rating) VALUES(?,?,?,?,?,?)',u,id,letter,m,1,4);
+    if(i!==2)sql('INSERT INTO study_a_findings VALUES(?,?)',await digest(text),JSON.stringify({...labels,pleural_effusion:i%2}));
+  }
+  const get=async(path,u)=>await (await call(env,path,null,u)).json();
+  const send=(body,u='reader-one')=>worker.fetch(new Request('https://example.test'+url+'/study-a-review',{
+    method:'PUT',headers:{Authorization:'Bearer '+u,'Content-Type':'application/json'},body:JSON.stringify(body)
+  }),env);
+  const r=await get(url,'reader-one');
+  assert.equal(r.protocol,'study-a');
+  assert.deepEqual(r.reports.map(x=>x.letter+x.text.slice(-1)),['A1','B2','C3']);
+  assert.ok(r.reports.every(x=>x.review===null));
+  assert.equal(r.reports[0].findings.pleural_effusion,1);
+  assert.equal(r.reports[1].findings,null);
+  assert.ok(models.every(m=>!JSON.stringify(r).includes(m)));
+  const body={letter:'A',revision:'initial',version:0,rating:3,comment:'',mode:'yes',confirmed:true,
+    errors:[{finding:'other',other:'Hilar mass',type:'missed',significant:true,detail:'On the left'}]};
+  assert.equal((await call(env,'/admin/study-a-results',null,'reader-one')).status,403);
+  assert.equal((await send(body,'coordinator')).status,403);
+  for (const change of [{confirmed:false},{mode:'no'},{rating:0},{letter:'D'},{errors:[{...body.errors[0],other:''}]}]) {
+    assert.equal((await send({...body,...change})).status,400);
+  }
+  assert.equal((await send({...body,letter:'B'})).status,409);
+  assert.equal((await send({...body,revision:'stale'})).status,409);
+  const {review:first}=await (await send(body)).json();
+  assert.equal(first.version,1);
+  assert.deepEqual(first.errors,body.errors);
+  assert.deepEqual((await (await send(body)).json()).review,first);
+  assert.equal((await send({...body,rating:4})).status,409);
+  assert.deepEqual((await get(url,'reader-two')).reports.map(x=>x.review),[null,null,null]);
+  assert.equal((await get('/blind/cases','reader-one')).cases[0].reviewed_count,1);
+  assert.equal((await get('/blind/cases','reader-two')).cases[0].reviewed_count,0);
+  const updated=await (await send({...body,version:1,mode:'no',errors:[],rating:5})).json();
+  assert.equal(updated.review.version,2);
+  assert.equal(updated.review.mode,'no');
+  const admin=await get('/admin/study-a-results','coordinator');
+  assert.deepEqual(admin.assignments.map(x=>x.model_name),models.slice(1));
+  assert.equal(admin.results.length,1);
+  assert.equal(admin.results[0].model_name,models[1]);
+  assert.deepEqual(admin.readers[0].case_ids,[id]);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM assignments WHERE rating=4').get().n,8);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM previously_rated_cases').get().n,1);
+  assert.equal((await call(env,url+'/ratings','unused','reader-one')).status,409);
+});
+
 test('historic records survive the migrations, including free-text reviewer and legacy decisions',()=>{
   const db=new DatabaseSync(':memory:');
   db.exec(sqlFile('./schema.sql').split('-- Existing shared sessions')[0].replace("'1','2','3','4','5',",''));

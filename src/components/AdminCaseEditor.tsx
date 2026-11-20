@@ -4,6 +4,7 @@ import {api,ResponseError} from '../services/session';
 import {useStudyData,type Letter} from '../services/blindStudy';
 import {message} from '../utils';
 import {hasHan} from '../../backend/english-ui.mjs';
+import {caseDisplayLabel,isStudyACase} from '../services/studyDisplay';
 
 interface EditorCase {
   case_id:string;
@@ -40,7 +41,8 @@ function Editor({source,reload}:{source:EditorCase;reload:()=>void}) {
   return <form className="work-card study-panel case-editor" onSubmit={e=>{e.preventDefault();void save();}}>
     <p>{saved.locked?'A reader has submitted ratings. The reviewed text and case name are locked.':'You can edit these reports until the first reader submits ratings for this case.'}</p>
     <label>Case name<input value={name} required maxLength={120} disabled={disabled} onChange={e=>{setName(e.target.value);setNotice('');}}/></label>
-    {reports.map((r,i)=><label key={r.letter}><strong>Report {r.letter} · {r.model_name}</strong>
+    {isStudyACase(source.case_id)&&<p>These are the original import letters. Study A readers see three anonymous reports assigned from this set. Edited text needs a matching findings extraction.</p>}
+    {reports.map((r,i)=><label key={r.letter}><strong>{isStudyACase(source.case_id)?'Source report':'Report'} {r.letter} · {r.model_name}</strong>
       <textarea value={r.text} rows={7} required maxLength={48000} disabled={disabled} onChange={e=>{
         const text=e.target.value;setReports(prev=>prev.map((item,pos)=>pos===i?{...item,text}:item));setNotice('');
       }}/>
@@ -59,7 +61,7 @@ export default function AdminCaseEditor() {
   const {data,error,refresh}=useStudyData<EditorCase>('/admin/cases/'+encodeURIComponent(caseId)+'/editor');
   return <main className="page study-upload">
     <Link className="review-link" to={'/admin/cases/'+encodeURIComponent(caseId)}>Back to case</Link>
-    <div className="page-heading"><div><h1>Edit case</h1><p>{caseId}</p></div></div>
+    <div className="page-heading"><div><h1>Edit case</h1><p>{caseDisplayLabel(caseId)}</p></div></div>
     {error?<p className="error" role="alert">{error} <button className="button secondary" onClick={refresh}>Retry</button></p>:
       data?<Editor key={caseId} source={data} reload={refresh}/>:<p role="status">Loading saved reports…</p>}
   </main>;

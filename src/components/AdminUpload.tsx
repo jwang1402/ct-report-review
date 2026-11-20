@@ -11,6 +11,7 @@ import DriveLinks from './DriveLinks';
 import DriveFolderUpload from './DriveFolderUpload';
 import PublicStudyAccess from './PublicStudyAccess';
 import {hasHan} from '../../backend/english-ui.mjs';
+import {studyDisplayName} from '../services/studyDisplay';
 
 const inputs=[
   {key:'images',label:'CT volumes',filename:'Reader_Images.zip'},
@@ -26,7 +27,8 @@ export default function AdminUpload() {
   const [driveBusy,setDriveBusy]=useState(false);
   const [publicAccess,setPublicAccess]=useState(false);
   const [restricted,setRestricted]=useState(false);
-  const [prefix,setPrefix]=useState('BR4shared');
+  const [studyName,setStudyName]=useState('Study A');
+  const prefix=studyName.trim().toLowerCase()==='study a'?'BR4shared':studyName.trim();
   const [packets,setPackets]=useState<StudyPackets|null>(null);
   const [busy,setBusy]=useState<'verify'|'upload'|null>(null);
   const [phase,setPhase]=useState('');
@@ -89,7 +91,7 @@ export default function AdminUpload() {
   }
   const validPrefix=/^[A-Za-z0-9][A-Za-z0-9_-]{0,39}$/.test(prefix);
   if(done)return <main className="page study-upload"><h1>{done==='published'?'Study published':'Study already published'}</h1>
-    <p>{prefix} · {packets?.cases.length} cases</p>
+    <p>{studyDisplayName(prefix)} · {packets?.cases.length} cases</p>
     <div className="actions"><Link className="button primary" to="/admin/cases">View cases</Link>{publicAccess&&<Link className="button secondary" to={radiologistsPath} target="_blank" rel="noreferrer">Radiologist review link</Link>}</div>
   </main>;
   return <main className="page study-upload">
@@ -118,9 +120,9 @@ export default function AdminUpload() {
     {packets&&<>
       <section className="work-card study-panel">
         <h2>Review study</h2><p>{packets.cases.length} CT volumes · {packets.cases.length*4} reports · {sizeLabel(volumeBytes)}</p>
-        <label>Study ID<input type="text" required maxLength={40} disabled={!!busy||driveBusy} value={prefix} onChange={e=>{setPrefix(e.target.value);setProgress(null);setError('');setPhase('');}}/></label>
+        <label>Study name or ID<input type="text" required maxLength={40} disabled={!!busy||driveBusy} value={studyName} onChange={e=>{setStudyName(e.target.value);setProgress(null);setError('');setPhase('');}}/></label>
         {!validPrefix&&<p role="alert">Use 1–40 letters, digits, hyphens or underscores, starting with a letter or digit.</p>}
-        <details><summary>Preview shared report assignments</summary><div className="table-scroll"><table>
+        <details><summary>Preview source report assignments</summary><div className="table-scroll"><table>
           <thead><tr>{['Case','Report A','Report B','Report C','Report D'].map(x=><th key={x}>{x}</th>)}</tr></thead>
           <tbody>{packets.cases.map(c=><tr key={c.case_id}><td>{c.case_id}</td>{['A','B','C','D'].map(l=><td key={l}>{c.reports.find(r=>r.letter===l)?.model_name}</td>)}</tr>)}</tbody>
         </table></div></details>

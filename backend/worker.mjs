@@ -3,10 +3,11 @@ import {englishReport} from './english-report.mjs';
 import {manageReaders,readerRoster} from './admin-doctor.mjs';
 import {hasHan,displayCaseName,displayReaderName,displayComment} from './english-ui.mjs';
 import {guestSession,joinStudy,listReaderStudies,publicStudyImages,setReaderAccess} from './public-readers.mjs';
+import {isStudyACase,studyACaseDetails,studyAProgress,saveStudyAReview,studyAResults} from './study-a.mjs';
 const siteOrigin='https://jwang1402.github.io';
 const origins = new Set([siteOrigin, 'http://127.0.0.1:5173', 'http://localhost:5173']);
 const encoder = new TextEncoder();
-const casePath = /^\/blind\/cases\/([A-Za-z0-9_-]{1,100})(?:\/(ratings|image))?$/;
+const casePath = /^\/blind\/cases\/([A-Za-z0-9_-]{1,100})(?:\/(ratings|image|study-a-review))?$/;
 const letters = ['A', 'B', 'C', 'D'];
 const sessionSeconds = 12 * 60 * 60;
 
@@ -118,7 +119,8 @@ async function caseList(db, user) {
         'AND COUNT(a.letter)=4*COUNT(DISTINCT a.username) AS scored FROM private_cases c ' +
         'LEFT JOIN assignments a USING(case_id) GROUP BY c.case_id ORDER BY c.case_id');
   const {results} = await query.all();
-  return {cases: results.map(row => ({...row, case_name:displayCaseName(row.case_name,row.case_id), scored: Boolean(row.scored)}))};
+  const cases=results.map(row => ({...row, case_name:displayCaseName(row.case_name,row.case_id), scored: Boolean(row.scored)}));
+  return {cases:await studyAProgress(db,user,cases)};
 }
 
 async function authorizedCase(db, user, id) {
@@ -133,6 +135,14 @@ async function authorizedCase(db, user, id) {
 
 async function caseDetails(db, user, row) {
   const doctor = user.role === 'doctor';
+  const drive=driveImage(row.image_key);
+  const publicCT=drive && await publicStudyEnabled(db,row);
+  const base={
+    case_id:row.case_id,case_name:doctor?row.case_id:displayCaseName(row.case_name,row.case_id),
+    imaging:{type:'NIFTI',filename:row.case_id+(row.image_filename.endsWith('.gz')?'.nii.gz':'.nii'),size:row.image_size,...drive},
+    ...(publicCT && {public_ct:true})
+  };
+  if(isStudyACase(row.case_id))return {...base,...await studyACaseDetails(db,row.case_id,user,digest)};
   const query = doctor
     ? db.prepare("SELECT a.letter,r.report_text AS text,a.rating,a.comment,COALESCE(v.revision,'initial') AS revision " +
         'FROM assignments a JOIN private_reports r USING(case_id,model_name) LEFT JOIN web_case_versions v ON v.case_id=a.case_id ' +
@@ -141,13 +151,8 @@ async function caseDetails(db, user, row) {
         'LEFT JOIN shared_case_letters s USING(case_id,model_name) WHERE r.case_id=? ORDER BY s.letter,r.model_name')
       .bind(row.case_id);
   const {results} = await query.all();
-  const drive=driveImage(row.image_key);
-  const publicCT=drive && await publicStudyEnabled(db,row);
   return {
-    case_id: row.case_id, case_name: doctor ? row.case_id : displayCaseName(row.case_name,row.case_id),
-    imaging: {type: 'NIFTI', filename: row.case_id + (row.image_filename.endsWith('.gz') ? '.nii.gz' : '.nii'), size: row.image_size,
-      ...drive},
-    ...(publicCT && {public_ct:true}),
+    ...base,
     reports: doctor ? results.map(({letter,text,rating,comment})=>({
       letter,text:englishReport(text),rating,comment:hasHan(comment)?null:comment
     })) : results.map(({letter,model_name,text})=>({
@@ -331,12 +336,21 @@ export default {
         }
         if (action === 'ratings' && request.method === 'POST') {
           requireRole(user,'doctor');
+          if(isStudyACase(id))throw new HttpError(409,'Study A now uses an individual report review. Reload your workspace.');
           await saveRatings(env.DB,user.username,id,await jsonBody(request));
           return reply({ok:true});
+        }
+        if (action==='study-a-review' && request.method==='PUT' && isStudyACase(id)){
+          requireRole(user,'doctor');
+          return reply(await saveStudyAReview(env.DB,id,user,await jsonBody(request),digest));
         }
       }
       if (path.startsWith('/admin/')) {
         requireRole(user,'admin');
+        if(path==='/admin/study-a-results' && request.method==='GET'){
+          const roster=await readerRoster(env.DB,digest,displayReaderName);
+          return reply(await studyAResults(env.DB,roster));
+        }
         if (path==='/admin/public-studies' && request.method==='GET') return reply(await listReaderStudies(env.DB,true));
         if (path==='/admin/public-studies' && request.method==='POST') return reply(await setReaderAccess(env.DB,await jsonBody(request,4096)));
         const imageList=/^\/admin\/public-studies\/([A-Za-z0-9_-]+)\/images$/.exec(path);
@@ -379,6 +393,7 @@ export default {
     await env.DB.batch([env.DB.prepare('DELETE FROM account_sessions WHERE expires<?').bind(now),
       env.DB.prepare('DELETE FROM sessions WHERE expires<?').bind(now),env.DB.prepare('DELETE FROM login_attempts'),
       env.DB.prepare('DELETE FROM accounts WHERE username IN (SELECT r.username FROM public_readers r WHERE (r.closed=1 OR r.expires<?) '+
-        'AND NOT EXISTS(SELECT 1 FROM assignments a WHERE a.username=r.username AND a.rating IS NOT NULL) LIMIT 100)').bind(now)]);
+        'AND NOT EXISTS(SELECT 1 FROM assignments a WHERE a.username=r.username AND a.rating IS NOT NULL) '+
+        'AND NOT EXISTS(SELECT 1 FROM study_a_reviews s WHERE s.username=r.username) LIMIT 100)').bind(now)]);
   }
 };

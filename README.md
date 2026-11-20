@@ -1,10 +1,10 @@
 # CT Report Review
 
-Doctors open `#/radiologists`, enter their name and select a case from the scrollable, numerically ordered **Case workspace**. The viewer shows loading progress for the CT. Each scan has four anonymous reports (A–D), displayed and downloaded in the original English. For a public study, the reader can open the images without a Google sign-in. Each reader's current tab holds the session used to save and resume ratings.
+Radiologists open `#/radiologists`, enter their name and select a case from the **Case workspace**. Study A presents three anonymous English reports (A–C) for each CT. Each report shows 18 findings extracted from its text. The reader records any errors, rates overall quality and submits one review per report. Readers share the same cases and report order but see only their own reviews. The current browser tab holds the reader's session.
 
 ## Prepare the study
 
-Follow the [deployment and import guide](docs/BLIND_STUDY.md) to set up D1 and create the first administrator. Sign in at `#/admin` and open **Upload Case** to verify the study archives. For cases approved for public release, select a dedicated Google Drive folder with **Anyone with the link · Viewer**, confirm public sharing and publish. Readers see the same cases and A–D reports. Administrators can edit a case before its first rating. Under **Results**, review completed cases and individual ratings, reveal the model names for each case or remove a reader and their ratings.
+Follow the [deployment and import guide](docs/BLIND_STUDY.md) to set up D1 and create the first administrator. Sign in at `#/admin` and open **Upload Case** to verify the source archives. For cases approved for public release, select a dedicated Google Drive folder with **Anyone with the link · Viewer**, confirm public sharing and publish. Under **Results**, administrators can track reader progress, export reviews and individual errors, and reveal the model names for each case. Previous four-report ratings have a separate results view.
 
 ## Application
 

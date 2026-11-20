@@ -2,6 +2,7 @@ import {useEffect,useRef,useState} from 'react';
 import {useStudyData} from '../services/blindStudy';
 import {api} from '../services/session';
 import {verifyPublicDriveCase} from '../services/publicDriveMedia';
+import {studyDisplayName,caseDisplayLabel} from '../services/studyDisplay';
 import {message} from '../utils';
 
 interface Study {prefix:string; case_count:number; enabled:boolean}
@@ -26,7 +27,7 @@ export default function PublicStudyAccess(){
         const data:{images:Image[]}=await api('/admin/public-studies/'+encodeURIComponent(study.prefix)+'/images',{signal:controller.signal});
         if(!data.images.length||data.images.length!==study.case_count)throw new Error('Unable to verify all CT files in this study.');
         for(const image of data.images){
-          setNotice('Checking public CT access · '+image.case_id);
+          setNotice('Checking public CT access · '+caseDisplayLabel(image.case_id));
           await verifyPublicDriveCase(image.drive_url,image,controller.signal);
         }
       }
@@ -40,7 +41,7 @@ export default function PublicStudyAccess(){
       :!list.data?<p role="status">Loading studies…</p>
       :!study?<p>No eligible studies have been published.</p>:<>
         <label>Study<select value={study.prefix} disabled={busy} onChange={e=>{setSelected(e.currentTarget.value);setApproved(false);setNotice('');setError('');}}>
-          {list.data.studies.map(s=><option key={s.prefix} value={s.prefix}>{s.prefix} · {s.case_count} cases · {s.enabled?'Open':'Closed'}</option>)}
+          {list.data.studies.map(s=><option key={s.prefix} value={s.prefix}>{studyDisplayName(s.prefix)} · {s.case_count} cases · {s.enabled?'Open':'Closed'}</option>)}
         </select></label>
         {study.enabled?<p>Anyone with the doctor link can enter a name and review this study. Closing entry here leaves Drive sharing settings in place.</p>:<>
           <p>For name-only access, share the approved CT files in Drive with “Anyone with the link” and allow downloads.</p>

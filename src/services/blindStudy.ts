@@ -1,18 +1,20 @@
 import {useEffect,useState, useCallback} from 'react';
 import {api} from './session';
 import {message} from '../utils';
+import type {StudyAReport} from './studyAReview';
 
-export interface StudyListItem {case_id:string; case_name:string; scored:boolean;}
+export interface StudyListItem {case_id:string; case_name:string; scored:boolean; protocol?:string; report_count?:number; reviewed_count?:number;}
 export type Letter='A'|'B'|'C'|'D';
 export interface ReaderReport {letter:Letter; text:string; rating:number|null; comment:string|null;}
 export interface NamedReport {model_name:string; text:string; letter?:Letter;}
 export interface StudyDetail {
+  protocol?:string;
   case_id:string;
   case_name:string;
   revision?:string;
   public_ct?:boolean;
   imaging:{type:'NIFTI';filename:string;size:number;drive_url?:string;sha256?:string};
-  reports:(ReaderReport|NamedReport)[];
+  reports:(ReaderReport|NamedReport|StudyAReport)[];
 }
 export interface StudyResult {
   case_id:string; username:string; display_name?:string|null; letter:Letter; model_name:string;
