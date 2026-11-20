@@ -1,4 +1,4 @@
-.study-a-review{font-size:13px;color:var(--green,#213c60);min-width:0}
+.study-a-review{font-size:13px;color:#213c60;min-width:0}
 .study-a-review>section{padding:15px 17px;border-bottom:1px solid var(--line)}
 .study-a-review h3,.study-a-review legend,.study-a-error-dialog h2{margin:0;font-weight:650}
 .study-a-section-heading,.study-a-submit,.study-a-errors li{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
@@ -12,7 +12,7 @@
 .study-a-table th{position:sticky;top:0;background:#f0f5fa;z-index:1}
 .study-a-table td:nth-child(2),.study-a-table th:nth-child(2){text-align:center}
 .study-a-table button{white-space:nowrap;padding:3px 6px}
-.study-a-positive{color:#16615d;font-weight:650}
+.study-a-positive{color:var(--status-ink);font-weight:650}
 .study-a-field{border:0;padding:0;margin:0;min-width:0}
 .study-a-field legend{margin-bottom:8px;padding:0;font-size:14px}
 .study-a-errors{list-style:none;margin:8px 0;padding:0}
