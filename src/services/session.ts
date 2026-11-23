@@ -78,16 +78,19 @@ export async function joinReview(prefix:string,name:string):Promise<Identity>{
   sessionStorage.removeItem(cache);
   return {username:identity.username,role:'doctor',display_name:identity.display_name,public_study:identity.public_study};
 }
-export async function logout(mode?:'switch-reader'){
+export async function logout(){
   const key=storageKey(), token=sessionToken();
   const cohort=readerCohort(window.location.hash.slice(1).split('?')[0]);
   try{await api('/logout',{method:'POST'});}finally{
-    if(sessionStorage.getItem(key)===token) sessionStorage.removeItem(key);
-    if(cohort&&mode==='switch-reader'){
-      const device=crossoverDeviceKey(cohort), current=sessionStorage.getItem(device);
-      try{if(current===null||current===localStorage.getItem(device))localStorage.removeItem(device);}catch{/* Storage may be disabled. */}
-      sessionStorage.removeItem(device);
+    const currentToken=sessionStorage.getItem(key);
+    if(!currentToken||currentToken===token){
+      sessionStorage.removeItem(key);
+      if(cohort){
+        const device=crossoverDeviceKey(cohort), current=sessionStorage.getItem(device);
+        try{if(current===null||current===localStorage.getItem(device))localStorage.removeItem(device);}catch{/* Storage may be disabled. */}
+        sessionStorage.removeItem(device);
+      }
+      if(storageKey()===key)window.dispatchEvent(new Event('ct-session-ended'));
     }
-    if(storageKey()===key)window.dispatchEvent(new Event('ct-session-ended'));
   }
 }

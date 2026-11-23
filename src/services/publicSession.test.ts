@@ -45,7 +45,7 @@ it('uses separate reader and admin routes and rejects retired reader links',asyn
   expect(workspaceRole('/radiologists-extra')).toBeNull();
 });
 
-it('keeps the browser match after sign-out and uses the canonical name from the server on re-entry',async()=>{
+it('uses the saved browser key and canonical name when a returning reader misspells their name',async()=>{
   location.hash='#/junior';
   const browser=new Map<string,string>();
   vi.stubGlobal('localStorage',{getItem:(k:string)=>browser.get(k)??null,setItem:(k:string,v:string)=>browser.set(k,v),removeItem:(k:string)=>browser.delete(k)});
@@ -55,21 +55,19 @@ it('keeps the browser match after sign-out and uses the canonical name from the 
     requests.push(JSON.parse(String(init.body)));
     return Response.json({token:'test-session',role:'doctor',cohort:'junior',display_name:'Dr Lee'});
   }));
-  const {enterReader,logout}=await import('./session');
+  const {enterReader}=await import('./session');
   await enterReader('junior','Dr Lee');
   saved.clear();
   await enterReader('junior','Dr Lee');
   expect(requests[0]).toEqual(requests[1]);
   expect(requests[0]).not.toHaveProperty('returning');
-  await logout();
   expect(browser.size).toBe(1);
-  expect(saved.has('ct-crossover-session:junior')).toBe(false);
   saved.clear();
   await expect(enterReader('junior','Dr Le')).resolves.toMatchObject({display_name:'Dr Lee',cohort:'junior'});
   expect(requests[2]).toEqual({...requests[0],name:'Dr Le'});
 });
 
-it('switches to a fresh shared-browser key for the next reader without clearing other roles',async()=>{
+it('clears the signed-out reader’s browser key so a first-time reader can use the shared computer',async()=>{
   location.hash='#/senior/workspace';
   const browser=new Map<string,string>([['ct-crossover-device:junior','junior-device']]);
   vi.stubGlobal('localStorage',{getItem:(k:string)=>browser.get(k)??null,setItem:(k:string,v:string)=>browser.set(k,v),removeItem:(k:string)=>browser.delete(k)});
@@ -86,7 +84,7 @@ it('switches to a fresh shared-browser key for the next reader without clearing 
   await enterReader('senior','Second Reader');
   expect(requests[1].entry_key).toBe(requests[0].entry_key);
   expect(sessionToken()).toBe('senior-2');
-  await logout('switch-reader');
+  await logout();
   expect(sessionToken()).toBe('');
   expect(saved.has('ct-crossover-device:senior')).toBe(false);
   expect(browser.has('ct-crossover-device:senior')).toBe(false);

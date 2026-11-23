@@ -2,7 +2,7 @@
 
 Share the [senior reader link](https://jwang1402.github.io/ct-report-review/#/senior) with the two senior radiologists and the [junior reader link](https://jwang1402.github.io/ct-report-review/#/junior) with the three junior radiologists. Each reader enters their name. Seniors choose Study A or Study B. Juniors go directly to Study B.
 
-Enter your name and select **Continue**. The same name in the same reader group resumes the existing readings on any browser. If the name does not match and the browser recognizes a reader, the site opens that reader’s workspace under their saved name. If neither matches, the site creates a new record. Use **Switch reader** before handing a shared computer to another person. Coordinators can correct a saved name in [Reader access](https://jwang1402.github.io/ct-report-review/#/admin/reader-access).
+Enter your name and select **Continue**. The same name in the same reader group resumes your saved work on any browser. If the name has no match, a recognized browser restores its reader’s record under the saved name. Sign out before handing a computer to someone else. This clears the browser’s reader association and keeps your study progress. Coordinators can correct a saved name in [Reader access](https://jwang1402.github.io/ct-report-review/#/admin/reader-access).
 
 ## Study A
 
