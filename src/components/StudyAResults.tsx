@@ -8,7 +8,7 @@ import {message,saveFile} from '../utils';
 
 type ErrorRecord={finding:string;other:string;type:'missed'|'unsupported'|'location'|'other';significant:boolean;detail:string};
 type Assignment={case_id:string;letter:string;model_name:string};
-type Result=Assignment&{username:string;display_name:string|null;rating:number;mode:'yes'|'no';confirmed:true;comment:string;errors:ErrorRecord[];updated_at:string};
+type Result=Assignment&{username:string;display_name:string|null;rating:number;mode:'yes'|'no';confirmed:true;comment:string;errors:ErrorRecord[];updated_at:string;checklist_version:string};
 type Reader={username:string;display_name:string|null;case_ids:string[];version:string};
 type Payload={results:Result[];assignments:Assignment[];readers:Reader[]};
 type DeleteProps={name:string;busy:boolean;error:string;cancel:()=>void;confirm:()=>void};
@@ -28,8 +28,8 @@ function csv(cells:unknown[][]) {
 }
 
 export function studyAExport(rows:Result[],reveal:boolean,kind:'reviews'|'errors') {
-  const identity=['study','case','reader','reader_id','report',...(reveal?['model']:[])];
-  const common=(r:Result)=>['Study A',shortId(r.case_id),r.display_name||r.username,r.username,r.letter,...(reveal?[r.model_name]:[])];
+  const identity=['study','case','reader','reader_id','report','checklist_version',...(reveal?['model']:[])];
+  const common=(r:Result)=>['Study A',shortId(r.case_id),r.display_name||r.username,r.username,r.letter,r.checklist_version,...(reveal?[r.model_name]:[])];
   if(kind==='errors')return csv([[...identity,'error_number','finding','error_type','clinically_significant','detail'],
     ...rows.flatMap(r=>r.errors.map((e,i)=>[...common(r),i+1,findingName(e),errorNames[e.type],e.significant?1:0,e.detail]))]);
   return csv([[...identity,'overall_quality','identified_errors','error_count','clinically_significant_errors','all_findings_reviewed','comment','updated_at'],

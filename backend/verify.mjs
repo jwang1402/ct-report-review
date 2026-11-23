@@ -97,6 +97,55 @@ test('Study A retains the original key and scores, binds 18 findings to the disp
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM assignments WHERE rating=4').get().n,8);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM previously_rated_cases').get().n,1);
   assert.equal((await call(env,url+'/ratings','unused','reader-one')).status,409);
+
+  const release='synthetic-reviewed-1', hash=await digest('Original report 1');
+  const stage=(value=1)=>sql('INSERT INTO study_a_finding_overrides(version,text_sha256,finding,raw_value,reviewed_value) VALUES(?,?,?,?,?)',
+    release,hash,'pleural_effusion',value,1-value);
+  sql('INSERT INTO study_a_checklist_releases(version) VALUES(?)',release);
+  assert.throws(()=>stage(0),/matching original finding/);
+  stage();
+  assert.equal((await get(url,'reader-two')).reports[0].findings.pleural_effusion,1);
+  // Publish between server-side read validation and the actual write.
+  const prepare=env.DB.prepare;
+  env.DB.prepare=query=>{
+    if (query.startsWith('INSERT INTO study_a_reviews')) {
+      sql('UPDATE study_a_checklist_releases SET active=1 WHERE version=?',release);
+      env.DB.prepare=prepare;
+    }
+    return prepare(query);
+  };
+  assert.equal((await send(body,'reader-two')).status,409);
+  const fresh=await get(url,'reader-two'), existing=await get(url,'reader-one');
+  assert.notEqual(fresh.revision,r.revision);
+  assert.equal(fresh.reports[0].findings.pleural_effusion,0);
+  assert.equal(fresh.reports[2].findings.pleural_effusion,1);
+  assert.equal(fresh.reports[1].findings,null);
+  assert.ok(models.every(m=>!JSON.stringify(fresh).includes(m)));
+  assert.deepEqual(existing.reports[0].findings,r.reports[0].findings);
+  assert.equal(existing.reports[0].review.checklist_version,'radbert-raw');
+  assert.equal((await send(body,'reader-two')).status,409);
+  const freshSave=await (await send({...body,revision:fresh.revision},'reader-two')).json();
+  assert.equal(freshSave.review.checklist_version,release);
+  const edited=await (await send({...body,revision:existing.revision,version:2})).json();
+  assert.equal(edited.review.checklist_version,'radbert-raw');
+  const keys=(await get('/admin/study-a-results','coordinator')).results.map(x=>x.checklist_version);
+  assert.deepEqual(keys.sort(),['radbert-raw',release].sort());
+  assert.equal(db.prepare("SELECT json_extract(labels_json,'$.pleural_effusion') AS original FROM study_a_findings WHERE text_sha256=?").get(hash).original,1);
+  sql('UPDATE study_a_checklist_releases SET active=0 WHERE version=?',release);
+  assert.equal((await get(url,'reader-two')).reports[0].findings.pleural_effusion,0);
+  assert.throws(()=>sql('DELETE FROM study_a_finding_overrides WHERE version=?',release),/immutable/);
+  assert.throws(()=>sql('UPDATE study_a_checklist_releases SET published=0 WHERE version=?',release),/immutable/);
+  assert.throws(()=>stage(),/Expected a draft/);
+});
+
+test('versioning migration assigns historical ratings the original checklist',()=>{
+  const db=new DatabaseSync(':memory:');
+  try {
+    db.exec('CREATE TABLE study_a_reviews(username TEXT); CREATE TABLE study_a_findings(text_sha256 TEXT PRIMARY KEY,labels_json TEXT);');
+    db.exec("INSERT INTO study_a_reviews VALUES('historical-reader')");
+    db.exec(sqlFile('./migrations/0008_study_a_reviewed_findings.sql'));
+    assert.equal(db.prepare('SELECT checklist_version FROM study_a_reviews').get().checklist_version,'radbert-raw');
+  } finally { db.close(); }
 });
 
 test('historic records survive the migrations, including free-text reviewer and legacy decisions',()=>{

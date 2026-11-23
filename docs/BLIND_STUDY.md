@@ -4,6 +4,8 @@
 
 源数据包保留每例四篇报告。Study A 按模型名称选取三篇，沿用各病例原有相对顺序，再编号为 A–C；字母对应的模型可随病例变化。Study A 的内部编号仍为 `BR4shared`。部署现有研究时先在 D1 执行 `backend/migrations/0007_study_a.sql`，再将核实过的报告文本哈希与 18 项提取值导入 `study_a_findings`。报告文本变更后须重新核对提取值才能提交该报告的评阅。
 
+已部署 0007 的数据库须先执行一次 `backend/migrations/0008_study_a_reviewed_findings.sql`，再部署 Worker。新建数据库可直接使用 `backend/schema.sql`。协调员在私有种子文件中新建一个未激活的清单版本，按报告文本哈希和病灶名称填写原值与审核值，核对后在同一事务内激活。每个版本包含相对原始提取值的全部修订，发布后即固定。种子文件仅供协调员使用。新评阅显示当前版本，已提交的评阅继续显示当时的清单；管理员导出的 `checklist_version` 标明各评阅使用的版本，`radbert-raw` 表示初始清单。
+
 ## 网站上线后，如何在浏览器里操作
 
 1. 从[管理员入口](https://jwang1402.github.io/ct-report-review/#/admin)登录。首位管理员由项目所有者在下方的「建立管理员账号」步骤中创建。

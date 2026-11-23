@@ -10,6 +10,8 @@ const findings = [
   'peribronchial_thickening','medical_material','coronary_artery_wall_calcification'
 ];
 const errorTypes = ['missed','unsupported','location','other'];
+const rawChecklist='radbert-raw';
+const activeChecklist="COALESCE((SELECT version FROM study_a_checklist_releases WHERE active=1),'radbert-raw')";
 
 function readLabels(dbValue) {
   if (!dbValue) return null;
@@ -21,12 +23,13 @@ function readLabels(dbValue) {
 function review(row) {
   if (row?.rating == null) return null;
   return {rating:row.rating, comment:row.comment, mode:row.mode, errors:JSON.parse(row.errors_json),
-    confirmed:!!row.confirmed, version:row.version, updated_at:row.updated_at};
+    confirmed:!!row.confirmed, version:row.version, updated_at:row.updated_at, checklist_version:row.checklist_version};
 }
 
 async function loadCase(db,id,user,digest) {
   const {results}=await db.prepare(`SELECT s.letter,s.model_name,p.report_text,
-    COALESCE(v.revision,'initial') AS revision,r.rating,r.comment,r.mode,r.errors_json,r.confirmed,r.version,r.updated_at
+    COALESCE(v.revision,'initial') AS case_revision,${activeChecklist} AS active_checklist,
+    r.rating,r.comment,r.mode,r.errors_json,r.confirmed,r.version,r.updated_at,r.checklist_version
     FROM study_a_reports s JOIN private_reports p USING(case_id,model_name)
     LEFT JOIN web_case_versions v ON v.case_id=s.case_id
     LEFT JOIN study_a_reviews r ON r.case_id=s.case_id AND r.model_name=s.model_name AND r.username=?
@@ -35,8 +38,15 @@ async function loadCase(db,id,user,digest) {
   return Promise.all(results.map(async row=>{
     const text=englishReport(row.report_text);
     const hash=await digest(text.replace(/\r\n/g,'\n').trim());
-    const record=await db.prepare('SELECT labels_json FROM study_a_findings WHERE text_sha256=?').bind(hash).first();
-    return {...row,text,hash,findings:readLabels(record?.labels_json)};
+    // Readers reopening a saved assessment continue to see the checklist they actually rated.
+    const version=row.checklist_version??row.active_checklist;
+    const record=await db.prepare(`SELECT f.labels_json,
+      (SELECT json_group_object(o.finding,o.reviewed_value) FROM study_a_finding_overrides o
+       WHERE o.version=? AND o.text_sha256=f.text_sha256) AS corrections
+      FROM study_a_findings f WHERE f.text_sha256=?`).bind(version,hash).first();
+    const labels=readLabels(record?.labels_json);
+    const revision=row.active_checklist===rawChecklist?row.case_revision:row.case_revision+'|'+row.active_checklist;
+    return {...row,text,hash,revision,checklist_version:version,findings:labels&&Object.assign(labels,JSON.parse(record.corrections))};
   }));
 }
 
@@ -98,13 +108,13 @@ export async function saveStudyAReview(db,id,user,data,digest) {
   const guard=`EXISTS(SELECT 1 FROM study_a_reports s JOIN assignments a USING(case_id,model_name)
     JOIN private_reports p USING(case_id,model_name) LEFT JOIN web_case_versions v ON v.case_id=s.case_id
     WHERE a.username=? AND s.case_id=? AND s.model_name=? AND s.letter=? AND p.report_text=?
-      AND COALESCE(v.revision,'initial')=?)`;
-  const args=[...identity,data.letter,source.report_text,data.revision];
+      AND COALESCE(v.revision,'initial')=? AND ${activeChecklist}=?)`;
+  const args=[...identity,data.letter,source.report_text,source.case_revision,source.active_checklist];
   let sql,params;
   if (!data.version) {
-    sql=`INSERT INTO study_a_reviews(username,case_id,model_name,text_sha256,rating,comment,mode,errors_json,updated_at,confirmed,version)
-      SELECT ?,?,?,?,?,?,?,?,?,1,1 WHERE ${guard} ON CONFLICT(username,case_id,model_name) DO NOTHING RETURNING *`;
-    params=[...identity,...fields,...args];
+    sql=`INSERT INTO study_a_reviews(username,case_id,model_name,text_sha256,rating,comment,mode,errors_json,updated_at,confirmed,version,checklist_version)
+      SELECT ?,?,?,?,?,?,?,?,?,1,1,? WHERE ${guard} ON CONFLICT(username,case_id,model_name) DO NOTHING RETURNING *`;
+    params=[...identity,...fields,source.checklist_version,...args];
   } else {
     sql=`UPDATE study_a_reviews SET text_sha256=?,rating=?,comment=?,mode=?,errors_json=?,updated_at=?,version=version+1
       WHERE username=? AND case_id=? AND model_name=? AND version=? AND ${guard} RETURNING *`;
@@ -115,7 +125,7 @@ export async function saveStudyAReview(db,id,user,data,digest) {
     // A lost response may be retried without adding another submission, error or version.
     saved=await db.prepare('SELECT * FROM study_a_reviews WHERE username=? AND case_id=? AND model_name=?')
       .bind(...identity).first();
-    if (!saved || saved.version!==data.version+1 || saved.text_sha256!==source.hash ||
+    if (!saved || saved.version!==data.version+1 || saved.text_sha256!==source.hash || saved.checklist_version!==source.checklist_version ||
         saved.rating!==data.rating || saved.comment!==data.comment || saved.mode!==data.mode || saved.errors_json!==errors) {
       throw new StudyError(409,'This review has changed. Reload it before submitting.');
     }
