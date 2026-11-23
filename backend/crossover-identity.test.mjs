@@ -1,0 +1,40 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {DatabaseSync} from 'node:sqlite';
+import {readFileSync} from 'node:fs';
+import worker,{passwordHash} from './worker.mjs';
+
+test('crossover names identify display only; recovery requires admin confirmation, preserves cohort and progress',async t=>{
+  const sql=new DatabaseSync(':memory:');t.after(()=>sql.close());
+  sql.exec('PRAGMA foreign_keys=ON');sql.exec(readFileSync(new URL('./schema.sql',import.meta.url),'utf8'));
+  function stmt(s,args=[]){return {bind:(...a)=>stmt(s,a),first:()=>sql.prepare(s).get(...args),all:()=>({results:sql.prepare(s).all(...args)}),run:()=>sql.prepare(s).run(...args)};}
+  const env={DB:{prepare:stmt,batch:async ss=>{sql.exec('BEGIN');try{const out=ss.map(s=>s.run());sql.exec('COMMIT');return out;}catch(e){sql.exec('ROLLBACK');throw e;}}}};
+  const call=(path,token,body)=>worker.fetch(new Request('https://test.invalid'+path,{method:body?'POST':'GET',headers:{...(token?{Authorization:'Bearer '+token}:{}),'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined}),env);
+  const key=()=>crypto.randomUUID()+crypto.randomUUID();
+  const path='/public/crossover-readers',adminPath='/admin/crossover-access';
+  const first={cohort:'junior',entry_key:key(),name:'Reader One'};
+  const res=await (await call(path,null,first)).json();assert.ok(res.token);assert.ok(!('username' in res));
+  assert.equal((await call('/blind/cases',res.token)).status,403);
+  assert.equal((await call(adminPath,res.token)).status,403);
+  assert.equal((await call('/session',res.token)).status,200);
+  assert.equal((await call('/logout',res.token,{})).status,200);
+  assert.equal((await call('/session',res.token)).status,401);
+  const second=await (await call(path,null,{...first,name:' reader  one '})).json();assert.ok(second.token);
+  assert.equal(sql.prepare('SELECT COUNT(*) n FROM crossover_readers').get().n,1);
+  assert.equal((await call(path,null,{...first,cohort:'senior'})).status,403);
+  const device={...first,entry_key:key()};
+  const pending=await (await call(path,null,device)).json();
+  assert.ok(pending.request_code && !pending.token);assert.equal(sql.prepare('SELECT COUNT(*) n FROM crossover_readers').get().n,1);
+  const salt=crypto.randomUUID(),password='private-test-pwd-123';
+  sql.prepare('INSERT INTO accounts VALUES(?,?,?,?)').run('coordinator','admin',salt,await passwordHash(password,salt));
+  const admin=(await (await call('/login',null,{username:'coordinator',password})).json()).token;
+  const {pending:[q],readers:[r]}=await (await call(adminPath,admin)).json();
+  assert.equal(pending.request_code,q.id.slice(0,8));assert.equal(r.display_name,'Reader One');
+  assert.equal((await call(adminPath,admin,{action:'link',id:q.id,username:r.username})).status,200);
+  const recovered=await (await call(path,null,{...device,returning:true})).json();assert.ok(recovered.token);
+  assert.equal((await call(adminPath,admin,{action:'rename',username:r.username,name:'Revised Name'})).status,200);
+  assert.equal((await (await call('/session',recovered.token)).json()).display_name,'Revised Name');
+  const patched=await (await call(path,null,{...device,name:'Revised Name'})).json();assert.ok(patched.token);
+  assert.equal(sql.prepare('SELECT COUNT(DISTINCT username) n FROM crossover_sessions').get().n,1);
+  assert.deepEqual((await (await call(adminPath,admin)).json()).pending,[]);
+});

@@ -16,11 +16,14 @@ function ErrorForm({editor,original,save,close}:{editor:ErrorEditor;original?:Fi
   const [type,setType]=useState<ErrorType|''>(original?.type??'');
   const [severity,setSeverity]=useState(original?(original.significant?'yes':'no'):'');
   const [detail,setDetail]=useState(original?.detail??'');
+  const [reported,setReported]=useState(original?.reported_location??''),[expected,setExpected]=useState(original?.expected_location??'');
   useEffect(()=>{const modal=dialog.current!;modal.showModal();return ()=>modal.close();},[]);
   function submit(e:FormEvent) {
     e.preventDefault();
     if(!finding||!type||!severity||(finding==='other'&&!other.trim()))return;
-    save({finding,other:finding==='other'?other.trim():'',type,significant:severity==='yes',detail:detail.trim()});
+    save({finding,other:finding==='other'?other.trim():'',type,significant:severity==='yes',detail:detail.trim(),
+      ...(type==='location'&&reported.trim()?{reported_location:reported.trim()}:{}),
+      ...(type==='location'&&expected.trim()?{expected_location:expected.trim()}:{})});
   }
   return <dialog ref={dialog} className="study-a-error-dialog" aria-labelledby="study-error-title" onCancel={close}>
     <form onSubmit={submit}><h2 id="study-error-title">{original?'Edit error':'Add error'}</h2>
@@ -32,6 +35,8 @@ function ErrorForm({editor,original,save,close}:{editor:ErrorEditor;original?:Fi
       <label>Error type<select required value={type} onChange={e=>setType(e.target.value as ErrorType)}>
         <option value="">Select…</option>{Object.entries(errorNames).map(([key,label])=><option value={key} key={key}>{label}</option>)}
       </select></label>
+      {type==='location'&&<><label>Location in report (optional)<input maxLength={160} value={reported} onChange={e=>setReported(e.target.value)}/></label>
+        <label>Location on CT (optional)<input maxLength={160} value={expected} onChange={e=>setExpected(e.target.value)}/></label></>}
       <label>Clinically significant?<select required value={severity} onChange={e=>setSeverity(e.target.value)}>
         <option value="">Select…</option><option value="yes">Yes</option><option value="no">No</option>
       </select></label>

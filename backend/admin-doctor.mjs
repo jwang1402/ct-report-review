@@ -18,8 +18,8 @@ async function publishedStudies(db) {
 const readerVersion=(digest,username,salt)=>digest(JSON.stringify(['reader-version',username,salt]));
 
 export async function readerRoster(db,digest,displayReaderName) {
-  const {results}=await db.prepare("SELECT a.username,a.password_salt,r.display_name FROM accounts a "+
-    "LEFT JOIN public_readers r USING(username) WHERE a.role='doctor' ORDER BY a.username").all();
+  const {results}=await db.prepare("SELECT a.username,a.password_salt,COALESCE(c.display_name,r.display_name) AS display_name FROM accounts a "+
+    "LEFT JOIN public_readers r USING(username) LEFT JOIN crossover_readers c USING(username) WHERE a.role='doctor' ORDER BY a.username").all();
   return Promise.all(results.map(async r=>({
     username:r.username,display_name:displayReaderName(r.display_name,r.username),
     version:await readerVersion(digest,r.username,r.password_salt)

@@ -29,10 +29,10 @@ export default function PublicReaderEntry({onStart}:{onStart:(user:Identity)=>vo
     {studies.length>1&&<label>Study<select value={prefix} disabled={busy} onChange={e=>setSelected(e.currentTarget.value)}>
       {studies.map(s=><option value={s.prefix} key={s.prefix}>{studyDisplayName(s.prefix)} ({s.case_count} cases)</option>)}
     </select></label>}
-    <label>Name<input autoComplete="name" maxLength={100} required value={name} onChange={e=>setName(e.currentTarget.value)}/></label>
+    {prefix==='BR4shared'?<p role="status">Open the reader link sent by your study coordinator.</p>:<label>Name<input autoComplete="name" maxLength={100} required value={name} onChange={e=>setName(e.currentTarget.value)}/></label>}
     {loadError?<p className="error" role="alert">{loadError} <button className="button secondary" type="button" onClick={refresh}>Retry</button></p>
       :!data?<p role="status">Loading studies…</p>:!studies.length?<p role="status">No studies are open for review yet.</p>:null}
     {error&&<p className="error" role="alert">{error}</p>}
-    <button className="button primary full" disabled={busy||!prefix||!name.trim()}>{busy?'Opening…':'Start review'}<ArrowRight size={17} aria-hidden="true"/></button>
+    {prefix!=='BR4shared'&&<button className="button primary full" disabled={busy||!prefix||!name.trim()}>{busy?'Opening…':'Start review'}<ArrowRight size={17} aria-hidden="true"/></button>}
   </form></main>;
 }

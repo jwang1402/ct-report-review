@@ -35,6 +35,24 @@ function call(env,path,data,token,origin='https://jwang1402.github.io') {
     ...(data?{body:JSON.stringify(data)}:{})}),env);
 }
 
+test('Study B serves CT metadata only for the current reader after opening the assigned examination',async t=>{
+  const {env,db}=fixture();t.after(()=>db.close());
+  const cases=Array.from({length:10},(_,i)=>({case_id:'B'+String(i+1).padStart(2,'0'),
+    drive_url:'https://drive.google.com/file/d/syntheticFileForCase'+i+'/view',sha256:String(i).repeat(64),size:2048,
+    draft:'Private AI draft.',reference:'Independent reference.',reference_findings:[],draft_errors:[]}));
+  db.prepare('UPDATE study_b_cohort SET cases_json=?,order_json=?,frozen=1 WHERE id=1').run(JSON.stringify(cases),JSON.stringify(cases.map(c=>c.case_id)));
+  const join=async name=>(await (await call(env,'/public/crossover-readers',{name,cohort:'senior',entry_key:crypto.randomUUID()+crypto.randomUUID()})).json()).token;
+  const first=await join('Senior One'),second=await join('Senior Two');
+  const path='/study-b/cases/B01';
+  const head=token=>worker.fetch(new Request('https://example.test'+path+'/image',{method:'HEAD',headers:{Authorization:'Bearer '+token,Range:'bytes=0-15'}}),{...env,DRIVE_MEDIA_KEY:'fixture-only'});
+  assert.equal((await head(first)).status,403);
+  const visit=await (await call(env,path+'/open',{period:1},first)).json();
+  assert.equal(visit.condition,'without_ai');assert.equal(visit.report,'');
+  assert.ok(!JSON.stringify(visit).includes('Private AI draft'));assert.ok(!JSON.stringify(visit).includes('Independent reference'));
+  const image=await head(first);assert.equal(image.status,206);assert.equal(image.headers.get('Content-Range'),'bytes 0-15/2048');
+  assert.equal((await head(second)).status,403);
+});
+
 test('Study A retains the original key and scores, binds 18 findings to the displayed report, and saves one blinded review at a time',async t=>{
   const {db,env}=fixture();
   t.after(()=>db.close());
@@ -63,6 +81,19 @@ test('Study A retains the original key and scores, binds 18 findings to the disp
     method:'PUT',headers:{Authorization:'Bearer '+u,'Content-Type':'application/json'},body:JSON.stringify(body)
   }),env);
   const r=await get(url,'reader-one');
+  const referencePath='/admin/study-a-references';
+  const ref={case_id:id,version:0,expert:'Independent expert',notes:'Private reference.',
+    findings:Object.fromEntries(Object.keys(labels).map(k=>[k,{status:'absent',side:''}]))};
+  const writeRef=(data,u)=>worker.fetch(new Request('https://example.test'+referencePath,{
+    method:'PUT',headers:{Authorization:'Bearer '+u,'Content-Type':'application/json'},body:JSON.stringify(data)
+  }),env);
+  assert.equal((await call(env,referencePath,null,'reader-one')).status,403);
+  assert.equal((await writeRef(ref,'reader-two')).status,403);
+  assert.equal((await writeRef(ref,'coordinator')).status,200);
+  assert.equal((await writeRef(ref,'coordinator')).status,409);
+  assert.equal((await writeRef({...ref,version:1,findings:{}},'coordinator')).status,400);
+  assert.equal((await get(referencePath,'coordinator')).references[0].version,1);
+  assert.ok(!JSON.stringify(await get(url,'reader-one')).includes(ref.notes));
   assert.equal(r.protocol,'study-a');
   assert.deepEqual(r.reports.map(x=>x.letter+x.text.slice(-1)),['A1','B2','C3']);
   assert.ok(r.reports.every(x=>x.review===null));

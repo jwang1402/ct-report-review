@@ -35,7 +35,7 @@ function validateReports(reports) {
 
 const displayNames = new Map(Object.entries({morph:'MORPH-CT',m3d:'M3D-LaMed-Phi-3-4B',btb:'BTB3D-16',ctchat:'CT-CHAT-8B'}));
 
-function driveFileReference(value) {
+export function driveFileReference(value) {
   const invalid='Use the Google Drive sharing link for an individual file.';
   check(validString(value,2048),400,invalid);
   let url;

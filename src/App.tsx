@@ -1,5 +1,5 @@
-import {lazy,Suspense} from 'react';
-import {HashRouter,Link,NavLink,Navigate,Route,Routes} from 'react-router-dom';
+import {lazy,Suspense,useState} from 'react';
+import {HashRouter,Link,NavLink,Navigate,Route,Routes,useNavigate} from 'react-router-dom';
 import {Activity,FolderOpen,Plus,ScanLine} from 'lucide-react';
 import {AuthGate, type Identity} from './components/AuthGate';
 import {BlindCase, StudyList} from './components/BlindCases';
@@ -11,10 +11,27 @@ const AdminUpload=lazy(()=>import('./components/AdminUpload'));
 const AdminCaseEditor=lazy(()=>import('./components/AdminCaseEditor'));
 const DoctorAccounts=lazy(()=>import('./components/DoctorAccounts'));
 const LegacyWorkspace=lazy(()=>import('./LegacyWorkspace'));
+const StudyBWorkspace=lazy(()=>import('./components/StudyBWorkspace'));
+const StudyBAdmin=lazy(()=>import('./components/StudyBAdmin'));
+const CrossoverAccess=lazy(()=>import('./components/CrossoverAccess'));
+
+function SeniorWorkspace(){
+  const [study,setStudy]=useState('');
+  const navigate=useNavigate();
+  return <main className="page reader-home"><div className="page-heading"><h1>Reader workspace</h1></div>
+    <form className="form-card senior-study-picker" onSubmit={e=>{e.preventDefault();if(study)navigate('/senior/'+study);}}>
+      <div><label htmlFor="senior-study">Study</label><select id="senior-study" required value={study} onChange={e=>setStudy(e.target.value)}>
+        <option value="">Choose a study</option><option value="study-a">Study A — Blinded report review</option>
+        <option value="study-b">Study B — CT reading</option>
+      </select></div>
+      <button className="button primary" type="submit" disabled={!study}>Open study</button>
+    </form></main>;
+}
 
 function Workspace({user}:{user:Identity}) {
+  const navigate=useNavigate();
   const isAdmin=user.role==='admin';
-  const home=workspaceHome(user.role);
+  const home=user.cohort==null?workspaceHome(user.role):user.cohort==='senior'?'/senior/workspace':'/junior/study-b';
   return <>
     <header className={isAdmin?'header':'header reader-nav'}>
       <Link className="brand" to={home}><span className="brand-icon"><ScanLine size={22}/></span><div>CT Report Review{isAdmin&&<small>CLINICAL RESEARCH</small>}</div></Link>
@@ -23,6 +40,7 @@ function Workspace({user}:{user:Identity}) {
         {isAdmin&&<NavLink to="/admin/cases"><FolderOpen size={15}/>Clinical Review</NavLink>}
         {isAdmin&&<NavLink to="/admin/upload"><Plus size={15}/>Upload Case</NavLink>}
         {isAdmin&&<NavLink to="/admin/results"><Activity size={15}/>Results</NavLink>}
+        {isAdmin&&<NavLink to="/admin/reader-access">Reader access</NavLink>}
       </nav>
       <div className="header-end"><span>{user.display_name||user.username}</span><button className="button secondary"
         title={user.public_study?'End this review session before leaving a shared computer':undefined}
@@ -30,9 +48,15 @@ function Workspace({user}:{user:Identity}) {
     </header>
     <Suspense fallback={<p className="page" role="status">Loading…</p>}>
       <Routes>
-        <Route path={home} element={<StudyHome role={user.role}/>}/>
+        {user.cohort==='senior'&&<Route path="/senior/workspace" element={<SeniorWorkspace/>}/>}
+        {user.cohort==='senior'&&<Route path="/senior/study-a" element={<StudyHome role="doctor"/>}/>}
+        {user.cohort==='senior'&&<Route path="/senior/cases/:caseId" element={<BlindCase role="doctor" publicReader/>}/>}
+        {user.cohort&&<Route path={'/'+user.cohort+'/study-b'} element={<StudyBWorkspace onConfirmName={()=>navigate('/'+user.cohort,{state:{returnToStudyB:true}})}/>}/>}
+        {isAdmin&&<Route path="/admin/study-b" element={<StudyBAdmin/>}/>}
+        {isAdmin&&<Route path="/admin/reader-access" element={<CrossoverAccess/>}/>}
+        {!user.cohort&&<Route path={home} element={<StudyHome role={user.role}/>}/>}
         <Route path={home+'/cases'} element={isAdmin?<StudyList role={user.role}/>:<Navigate to={home} replace/>}/>
-        <Route path={home+'/cases/:caseId'} element={<BlindCase role={user.role} publicReader={!!user.public_study}/>}/>
+        {!user.cohort&&<Route path={home+'/cases/:caseId'} element={<BlindCase role={user.role} publicReader={!!user.public_study}/>}/>}
         {isAdmin&&<Route path="/admin/upload" element={<AdminUpload/>}/>}
         {isAdmin&&<Route path="/admin/readers" element={<DoctorAccounts/>}/>}
         {isAdmin&&<Route path="/admin/cases/:caseId/edit" element={<AdminCaseEditor/>}/>}

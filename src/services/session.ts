@@ -1,15 +1,21 @@
 export const apiBase=(import.meta.env.VITE_REVIEW_API_URL as string|undefined)?.replace(/\/$/,'');
 export const radiologistsPath='/radiologists';
+export type Cohort='senior'|'junior';
+export function readerCohort(path:string):Cohort|undefined {
+  return (['senior','junior'] as const).find(t=>path==='/'+t||path.startsWith('/'+t+'/'));
+}
 export function workspaceHome(role:Identity['role']) {
-  return role==='admin'?'/admin':radiologistsPath;
+  const cohort=typeof window==='undefined'?undefined:readerCohort(window.location.hash.slice(1).split('?')[0]);
+  return role==='admin'?'/admin':cohort?'/'+cohort:radiologistsPath;
 }
 export function workspaceRole(path:string) {
   if(path==='/admin'||path.startsWith('/admin/')||path==='/results'||path==='/upload')return 'admin';
-  if(path===''||path==='/'||path==='/cases'||path===radiologistsPath||path.startsWith(radiologistsPath+'/'))return 'doctor';
+  if(readerCohort(path)||path===''||path==='/'||path==='/cases'||path===radiologistsPath||path.startsWith(radiologistsPath+'/'))return 'doctor';
   return null;
 }
 function storageKey(){
-  return workspaceRole(window.location.hash.slice(1).split('?')[0])==='admin'?'ct-review-session':'ct-review-reader-session';
+  const path=window.location.hash.slice(1).split('?')[0], cohort=readerCohort(path);
+  return cohort?'ct-crossover-session:'+cohort:workspaceRole(path)==='admin'?'ct-review-session':'ct-review-reader-session';
 }
 export function sessionToken(){try{return sessionStorage.getItem(storageKey())||'';}catch{return '';}}
 function storeSession(key:string,token:unknown){
@@ -39,7 +45,31 @@ export async function login(username:string,password:string){
   const result=await api('/login',{method:'POST',body:JSON.stringify({username,password})});
   storeSession(key,result.token);
 }
-export interface Identity {username:string;role:'admin'|'doctor';display_name?:string;public_study?:string}
+export interface Identity {username:string;role:'admin'|'doctor';display_name?:string;public_study?:string;cohort?:Cohort}
+const crossoverDeviceKey=(cohort:Cohort)=>'ct-crossover-device:'+cohort;
+export function remembersCrossoverDevice(cohort:Cohort){
+  try{return Boolean(localStorage.getItem(crossoverDeviceKey(cohort)));}catch{return false;}
+}
+export function hasCrossoverDevice(cohort:Cohort){
+  try{return remembersCrossoverDevice(cohort)||Boolean(sessionStorage.getItem(crossoverDeviceKey(cohort)));}catch{return false;}
+}
+export function forgetCrossoverDevice(cohort:Cohort){
+  localStorage.removeItem(crossoverDeviceKey(cohort));
+  sessionStorage.removeItem(crossoverDeviceKey(cohort));
+}
+export async function enterReader(cohort:Cohort,name:string,returning:boolean,remember:boolean):Promise<Identity|{request_code:string}>{
+  const key=storageKey(), device=crossoverDeviceKey(cohort);
+  let secret=localStorage.getItem(device)||sessionStorage.getItem(device);
+  if(!secret)secret=crypto.randomUUID()+crypto.randomUUID();
+  sessionStorage.setItem(device,secret);
+  if(remember)localStorage.setItem(device,secret);
+  else localStorage.removeItem(device);
+  const result=await api('/public/crossover-readers',{method:'POST',body:JSON.stringify({cohort,name,returning,entry_key:secret})});
+  if(result.pending)return {request_code:result.request_code};
+  if(result.cohort!==cohort||result.role!=='doctor')throw new Error('Incorrect reader group.');
+  storeSession(key,result.token);
+  return {username:'',role:'doctor',display_name:result.display_name,cohort};
+}
 export async function joinReview(prefix:string,name:string):Promise<Identity>{
   const key=storageKey();
   const cache='ct-review-pending-reader';
@@ -60,8 +90,10 @@ export async function joinReview(prefix:string,name:string):Promise<Identity>{
 }
 export async function logout(){
   const key=storageKey(), token=sessionToken();
+  const cohort=readerCohort(window.location.hash.slice(1).split('?')[0]);
   try{await api('/logout',{method:'POST'});}finally{
     if(sessionStorage.getItem(key)===token) sessionStorage.removeItem(key);
+    if(cohort)sessionStorage.removeItem(crossoverDeviceKey(cohort));
     if(storageKey()===key)window.dispatchEvent(new Event('ct-session-ended'));
   }
 }

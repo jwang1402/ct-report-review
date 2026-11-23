@@ -3,7 +3,7 @@ import { englishReport } from './english-report.mjs';
 import { hasHan } from './english-ui.mjs';
 
 export const isStudyACase = id => /^BR4shared-Case(?:0[1-9]|10)$/.test(id);
-const findings = [
+export const findings = [
   'cardiomegaly','hiatal_hernia','pericardial_effusion','lymphadenopathy','lung_nodule','emphysema',
   'interlobular_septal_thickening','consolidation','atelectasis','lung_opacity','pulmonary_fibrotic_sequela',
   'bronchiectasis','pleural_effusion','mosaic_attenuation_pattern','arterial_wall_calcification',
@@ -91,7 +91,13 @@ function validate(data) {
         (e.finding==='other')!==!!(e.other??'').trim() || !textOK(e.detail??'',1000)) {
       throw new StudyError(400,'Each error needs a finding, an error type, and a clinical significance choice.');
     }
-    return {finding:e.finding,other:(e.other??'').trim(),type:e.type,significant:e.significant,detail:(e.detail??'').trim()};
+    const location={};
+    for(const field of ['reported_location','expected_location']){
+      if(e[field]==null||e[field]==='')continue;
+      if(e.type!=='location'||!textOK(e[field],160))throw new StudyError(400,'Check the location recorded for this error.');
+      location[field]=e[field].trim();
+    }
+    return {finding:e.finding,other:(e.other??'').trim(),type:e.type,significant:e.significant,detail:(e.detail??'').trim(),...location};
   });
 }
 
@@ -136,7 +142,11 @@ export async function saveStudyAReview(db,id,user,data,digest) {
 export async function studyAResults(db,roster) {
   const [keyRows,ratings,enrolled]=await Promise.all([
     db.prepare('SELECT case_id,letter,model_name FROM study_a_reports ORDER BY case_id,letter').all(),
-    db.prepare(`SELECT s.letter,r.* FROM study_a_reviews r JOIN study_a_reports s USING(case_id,model_name)
+    db.prepare(`SELECT s.letter,r.*,f.labels_json,
+      (SELECT json_group_object(o.finding,o.reviewed_value) FROM study_a_finding_overrides o
+       WHERE o.version=r.checklist_version AND o.text_sha256=r.text_sha256) AS corrections
+      FROM study_a_reviews r JOIN study_a_reports s USING(case_id,model_name)
+      LEFT JOIN study_a_findings f ON f.text_sha256=r.text_sha256
       ORDER BY r.case_id,r.username,s.letter`).all(),
     db.prepare(`SELECT DISTINCT a.username,s.case_id FROM assignments a JOIN study_a_reports s USING(case_id,model_name)
       ORDER BY a.username,s.case_id`).all()
@@ -146,6 +156,6 @@ export async function studyAResults(db,roster) {
   const names=new Map(readers.map(r=>[r.username,r.display_name]));
   return {assignments:keyRows.results,readers,results:ratings.results.map(r=>({
     case_id:r.case_id,username:r.username,display_name:names.get(r.username),letter:r.letter,model_name:r.model_name,
-    protocol:'study-a',...review(r)
+    protocol:'study-a',findings:r.labels_json?{...readLabels(r.labels_json),...JSON.parse(r.corrections)}:null,...review(r)
   }))};
 }

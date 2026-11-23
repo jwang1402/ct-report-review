@@ -3,7 +3,10 @@ import {englishReport} from './english-report.mjs';
 import {manageReaders,readerRoster} from './admin-doctor.mjs';
 import {hasHan,displayCaseName,displayReaderName,displayComment} from './english-ui.mjs';
 import {guestSession,joinStudy,listReaderStudies,publicStudyImages,setReaderAccess} from './public-readers.mjs';
+import {crossoverAccess,crossoverSession,enterCrossover,visibleCrossover} from './crossover-identity.mjs';
 import {isStudyACase,studyACaseDetails,studyAProgress,saveStudyAReview,studyAResults} from './study-a.mjs';
+import {listReferences,saveReference} from './study-a-reference.mjs';
+import {routeStudyB,studyBImage} from './study-b.mjs';
 const siteOrigin='https://jwang1402.github.io';
 const origins = new Set([siteOrigin, 'http://127.0.0.1:5173', 'http://localhost:5173']);
 const encoder = new TextEncoder();
@@ -97,7 +100,7 @@ async function sessionFor(request, db, now) {
   const match = /^Bearer ([^\s]{1,200})$/.exec(request.headers.get('Authorization') || '');
   if (!match) throw new HttpError(401, 'Please sign in.');
   const tokenHash = await digest(match[1]);
-  const user = match[1].startsWith('reader.') ? await guestSession(db,tokenHash,now) : await db.prepare(
+  const user = match[1].startsWith('readerx.') ? await crossoverSession(db,tokenHash,now) : match[1].startsWith('reader.') ? await guestSession(db,tokenHash,now) : await db.prepare(
     'SELECT a.username,a.role,s.expires FROM account_sessions s JOIN accounts a ON a.username=s.username ' +
     'AND a.role=s.role AND a.password_hash=s.credential_stamp WHERE s.token_hash=? AND s.expires>?'
   ).bind(tokenHash, now).first();
@@ -268,10 +271,10 @@ async function driveMediaBytes(request,drive,key,range,totalSize) {
   return bytes;
 }
 
-async function imageResponse(request, env, row, headers) {
-  const drive=driveImage(row.image_key);
+async function imageResponse(request, env, row, headers, authorizedStudyBImage=null) {
+  const drive=authorizedStudyBImage??driveImage(row.image_key);
   if(drive){
-    if(!await publicStudyEnabled(env.DB,row)) throw new HttpError(409,'Open the authorized Google Drive link to download this image.');
+    if(!authorizedStudyBImage&&!await publicStudyEnabled(env.DB,row)) throw new HttpError(409,'Open the authorized Google Drive link to download this image.');
     if(!env.DRIVE_MEDIA_KEY) throw new HttpError(503,'The CT download service has not been configured.');
   }else if (!env.IMAGES) throw new HttpError(503, 'Private image storage is unavailable.');
   const output = new Headers(headers);
@@ -316,14 +319,32 @@ export default {
       const now = Math.floor(Date.now()/1000);
       if (path === '/health' && request.method === 'GET') return reply({ok:true});
       if (path === '/public/studies' && request.method === 'GET') return reply(await listReaderStudies(env.DB,false));
+      if (path === '/public/crossover-readers' && request.method === 'POST') return reply(await enterCrossover(request,env.DB,now,{jsonBody,digest}));
       if (path === '/public/readers' && request.method === 'POST') return reply(await joinStudy(request,env.DB,now,{jsonBody,digest}));
       if (path === '/login' && request.method === 'POST') return reply(await login(request,env.DB,now));
       const {user,tokenHash} = await sessionFor(request,env.DB,now);
-      if (path === '/session' && request.method === 'GET') return reply({...user,display_name:displayReaderName(user.display_name,user.username)});
+      if(path==='/study-b'||path.startsWith('/study-b/')||path==='/admin/study-b'||path.startsWith('/admin/study-b/')){
+        if(path.startsWith('/admin/'))requireRole(user,'admin');
+        else requireRole(user,'doctor');
+        const image=/^\/study-b\/cases\/(B(?:0[1-9]|10))\/image$/.exec(path);
+        if(image && (request.method==='GET'||request.method==='HEAD')){
+          const file=await studyBImage(env.DB,user,image[1],now);
+          return await imageResponse(request,env,{image_size:file.size},headers,file);
+        }
+        const result=await routeStudyB(path,request,user,env.DB,{jsonBody,now});
+        if(result!==null)return reply(result);
+        throw new HttpError(404,'Study B request not found.');
+      }
+      if (path === '/session' && request.method === 'GET') return reply(user.cohort?visibleCrossover(user):{...user,display_name:displayReaderName(user.display_name,user.username)});
       if (path === '/logout' && request.method === 'POST') {
-        const sql=user.public_study ? 'UPDATE public_readers SET closed=1 WHERE token_hash=?' : 'DELETE FROM account_sessions WHERE token_hash=?';
+        const sql=user.cohort ? 'DELETE FROM crossover_sessions WHERE token_hash=?' : user.public_study ? 'UPDATE public_readers SET closed=1 WHERE token_hash=?' : 'DELETE FROM account_sessions WHERE token_hash=?';
         await env.DB.prepare(sql).bind(tokenHash).run();
         return reply({ok:true});
+      }
+      if(user.cohort && (path==='/blind/cases'||path.startsWith('/blind/cases/'))){
+        if(user.cohort!=='senior')throw new HttpError(403,'This workspace is for senior readers.');
+        if(!(await env.DB.prepare("SELECT 1 AS ok FROM public_studies WHERE prefix='BR4shared' AND enabled=1").first()))
+          throw new HttpError(403,'Study A is closed.');
       }
       if (path === '/blind/cases' && request.method === 'GET') return reply(await caseList(env.DB,user));
       const route = casePath.exec(path);
@@ -347,6 +368,9 @@ export default {
       }
       if (path.startsWith('/admin/')) {
         requireRole(user,'admin');
+        if(path==='/admin/crossover-access' && ['GET','POST'].includes(request.method))return reply(await crossoverAccess(request,env.DB,jsonBody));
+        if(path==='/admin/study-a-references' && request.method==='GET')return reply(await listReferences(env.DB));
+        if(path==='/admin/study-a-references' && request.method==='PUT')return reply(await saveReference(env.DB,await jsonBody(request)));
         if(path==='/admin/study-a-results' && request.method==='GET'){
           const roster=await readerRoster(env.DB,digest,displayReaderName);
           return reply(await studyAResults(env.DB,roster));
@@ -390,7 +414,7 @@ export default {
   },
   async scheduled(event, env) {
     const now = Math.floor(Date.now()/1000);
-    await env.DB.batch([env.DB.prepare('DELETE FROM account_sessions WHERE expires<?').bind(now),
+    await env.DB.batch([env.DB.prepare('DELETE FROM crossover_sessions WHERE expires<?').bind(now),env.DB.prepare('DELETE FROM account_sessions WHERE expires<?').bind(now),
       env.DB.prepare('DELETE FROM sessions WHERE expires<?').bind(now),env.DB.prepare('DELETE FROM login_attempts'),
       env.DB.prepare('DELETE FROM accounts WHERE username IN (SELECT r.username FROM public_readers r WHERE (r.closed=1 OR r.expires<?) '+
         'AND NOT EXISTS(SELECT 1 FROM assignments a WHERE a.username=r.username AND a.rating IS NOT NULL) '+

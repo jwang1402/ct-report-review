@@ -11,7 +11,7 @@ export type Finding=keyof typeof findingNames;
 export const findings=Object.keys(findingNames) as Finding[];
 export const errorNames={missed:'Missed finding',unsupported:'Unsupported finding',location:'Incorrect location / laterality',other:'Other description error'} as const;
 export type ErrorType=keyof typeof errorNames;
-export interface FindingError { finding:Finding|'other'; other:string; type:ErrorType; significant:boolean; detail:string }
+export interface FindingError { finding:Finding|'other'; other:string; type:ErrorType; significant:boolean; detail:string; reported_location?:string; expected_location?:string }
 export interface ReviewDraft {mode:'yes'|'no'|null; errors:FindingError[]; rating:number|null; comment:string; confirmed:boolean}
 export interface SavedReview extends ReviewDraft { version:number; updated_at:string; confirmed:true; mode:'yes'|'no'; rating:number }
 export type FindingMap=Record<Finding,0|1>;

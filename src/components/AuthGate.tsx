@@ -1,13 +1,17 @@
 import {useEffect, useState, type FormEvent, type ReactNode} from 'react';
-import {Link,useLocation} from 'react-router-dom';
+import {Link,useLocation,useNavigate} from 'react-router-dom';
 import {ScanLine} from 'lucide-react';
 import {api, login, sessionToken, clearSession,radiologistsPath,workspaceRole,type Identity} from '../services/session';
 import PublicReaderEntry from './PublicReaderEntry';
+import CrossoverEntry from './CrossoverEntry';
+import {readerCohort} from '../services/session';
 import {message} from '../utils';
 
 export type {Identity} from '../services/session';
 async function currentIdentity():Promise<Identity> {
   const session = await api('/session');
+  if (session.role==='doctor' && ['senior','junior'].includes(session.cohort))
+    return {username:'',role:'doctor',cohort:session.cohort,display_name:session.display_name};
   if (typeof session.username !== 'string' || !['admin','doctor'].includes(session.role)) {
     throw new Error('This account has no assigned study role.');
   }
@@ -18,11 +22,12 @@ export function AuthGate({children}:{children:(user:Identity)=>ReactNode}) {
   const {pathname}=useLocation();
   const role=workspaceRole(pathname);
   if(!role)return <main className="page"><h1>Page not found</h1><Link to={radiologistsPath}>Open case review</Link></main>;
-  return <WorkspaceGate key={role} role={role}>{children}</WorkspaceGate>;
+  return <WorkspaceGate key={readerCohort(pathname)??role} role={role}>{children}</WorkspaceGate>;
 }
 
 function WorkspaceGate({role,children}:{role:Identity['role'];children:(user:Identity)=>ReactNode}) {
-  const {pathname} = useLocation();
+  const {pathname,state} = useLocation();
+  const navigate=useNavigate(),cohort=readerCohort(pathname);
   const [user,setUser] = useState<Identity|null>(null);
   const [checking,setChecking] = useState(true);
   const [username,setUsername] = useState('');
@@ -40,7 +45,7 @@ function WorkspaceGate({role,children}:{role:Identity['role'];children:(user:Ide
       try {
         const identity = await currentIdentity();
         if (active && token === sessionToken()) {
-          if(identity.role===role) setUser(identity);
+          if(identity.role===role && identity.cohort===cohort) setUser(identity);
           else clearSession();
         }
       } catch (e) {
@@ -50,7 +55,7 @@ function WorkspaceGate({role,children}:{role:Identity['role'];children:(user:Ide
     void verify();
     const timer = window.setInterval(() => { if(sessionToken()) void verify(); },60000);
     return () => { active=false; clearInterval(timer); window.removeEventListener('ct-session-ended',end); };
-  },[role]);
+  },[role,cohort]);
 
   async function signIn(event:FormEvent) {
     event.preventDefault();
@@ -66,6 +71,9 @@ function WorkspaceGate({role,children}:{role:Identity['role'];children:(user:Ide
     } finally { setPassword(''); setBusy(false); }
   }
   if(checking) return <main className="login-page" role="status">Checking session…</main>;
+  if(cohort && (pathname==='/'+cohort || !user))return <CrossoverEntry cohort={cohort} onStart={u=>{
+    setUser(u);navigate('/'+cohort+(cohort==='senior'&&!state?.returnToStudyB?'/workspace':'/study-b'),{replace:true});
+  }}/>;
   if(user) return children(user);
   if(role==='doctor'&&pathname!==radiologistsPath+'/account')return <PublicReaderEntry onStart={setUser}/>;
   return <main className="login-page"><form className="form-card login-card" onSubmit={signIn}>

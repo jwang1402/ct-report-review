@@ -51,12 +51,12 @@ async function reconnectAfter(delay:number,signal:AbortSignal){
   });
 }
 
-async function studyMedia(caseId:string,signal:AbortSignal,range?:string) {
+async function studyMedia(caseId:string,signal:AbortSignal,range?:string,studyB=false) {
   const token=sessionToken();
   if(!token||!apiBase)throw new TransferError('Your review session has ended. Reopen the case to load the CT.',false);
   const headers=new Headers({Authorization:'Bearer '+token});
   if(range)headers.set('Range',range);
-  const url=apiBase+'/blind/cases/'+encodeURIComponent(caseId)+'/image'+(range?'?part='+range.slice(6):'');
+  const url=apiBase+studyImagePath(caseId,studyB)+(range?'?part='+range.slice(6):'');
   const response=await fetch(url,{headers,signal,credentials:'omit',cache:'no-store',redirect:'error'});
   if(!response.ok||!response.body){
     let msg='The review service could not load this CT ('+response.status+').';
@@ -70,6 +70,11 @@ async function studyMedia(caseId:string,signal:AbortSignal,range?:string) {
 }
 
 type PartSource=(signal:AbortSignal,range?:string)=>Promise<Response>;
+
+export function studyImagePath(caseId:string,studyB:boolean) {
+  const group=studyB?'/study-b/cases/':'/blind/cases/';
+  return group+encodeURIComponent(caseId)+'/image';
+}
 
 class InvalidMedia extends Error {}
 
@@ -118,7 +123,7 @@ async function readTransfer(source:PartSource,total:number,start:number,end:numb
   }
 }
 
-export async function downloadPublicDriveCase(link:string,expected:ExpectedImage,signal:AbortSignal,onProgress?:(progress:DriveImageProgress)=>void,caseId?:string) {
+export async function downloadPublicDriveCase(link:string,expected:ExpectedImage,signal:AbortSignal,onProgress?:(progress:DriveImageProgress)=>void,caseId?:string,studyB=false) {
   const total=expected.size;
   const parts:Blob[]=[];
   const direct:PartSource=(partSignal,range)=>media(link,partSignal,range);
@@ -139,7 +144,7 @@ export async function downloadPublicDriveCase(link:string,expected:ExpectedImage
     if(e instanceof InvalidMedia||(!caseId&&e instanceof TransferError&&!e.retryable))throw e;
     if(saved<total)onProgress?.({stage:'download',received:saved,total,reconnecting:true});
   }
-  const resume:PartSource=caseId?(partSignal,range)=>studyMedia(caseId,partSignal,range):direct;
+  const resume:PartSource=caseId?(partSignal,range)=>studyMedia(caseId,partSignal,range,studyB):direct;
   let span=RANGE_BYTES;
   while(saved<total){
     for(let retry=0;;){

@@ -65,6 +65,7 @@ export async function joinStudy(request,db,now,{jsonBody,digest}) {
   const tokenHash=await digest(token);
   const username='reader:'+tokenHash.slice(0,32);
   const existing=await db.prepare('SELECT username FROM public_readers WHERE token_hash=?').bind(tokenHash).first();
+  if(!existing && prefix==='BR4shared')throw new StudyError(403,'Use the senior or junior reader link supplied by your coordinator.');
   if(!existing){
     const ip=request.headers.get('CF-Connecting-IP')||'local';
     const bucket=await digest(JSON.stringify(['join-public',ip,Math.floor(now/600)]));

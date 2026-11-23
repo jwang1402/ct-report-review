@@ -129,7 +129,7 @@ export function BlindCase({role,publicReader=false}:{role:Role;publicReader?:boo
   const {data,error,refresh}=useStudyData<StudyDetail>(caseEndpoint(caseId));
   const library=useStudyData<{cases:StudyListItem[]}>('/blind/cases');
   const cases=inCaseOrder(library.data?.cases??[]);
-  const back=role==='doctor'?radiologistsPath:'/admin/cases';
+  const back=role==='doctor'?(workspaceHome(role)==='/senior'?'/senior/study-a':radiologistsPath):'/admin/cases';
   if(!data)return <main className="page"><div className="empty"><ScanLine size={32}/><h2>{error||'Loading case…'}</h2>
     {error&&<button className="button secondary" onClick={refresh}>Retry</button>}<Link className="button secondary" to={back}>Back to cases</Link></div></main>;
   const studyA=data.protocol==='study-a';
