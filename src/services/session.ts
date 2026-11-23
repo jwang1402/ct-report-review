@@ -47,24 +47,14 @@ export async function login(username:string,password:string){
 }
 export interface Identity {username:string;role:'admin'|'doctor';display_name?:string;public_study?:string;cohort?:Cohort}
 const crossoverDeviceKey=(cohort:Cohort)=>'ct-crossover-device:'+cohort;
-export function remembersCrossoverDevice(cohort:Cohort){
-  try{return Boolean(localStorage.getItem(crossoverDeviceKey(cohort)));}catch{return false;}
-}
-export function hasCrossoverDevice(cohort:Cohort){
-  try{return remembersCrossoverDevice(cohort)||Boolean(sessionStorage.getItem(crossoverDeviceKey(cohort)));}catch{return false;}
-}
-export function forgetCrossoverDevice(cohort:Cohort){
-  localStorage.removeItem(crossoverDeviceKey(cohort));
-  sessionStorage.removeItem(crossoverDeviceKey(cohort));
-}
-export async function enterReader(cohort:Cohort,name:string,returning:boolean,remember:boolean):Promise<Identity|{request_code:string}>{
+export async function enterReader(cohort:Cohort,name:string):Promise<Identity|{request_code:string}>{
   const key=storageKey(), device=crossoverDeviceKey(cohort);
-  let secret=localStorage.getItem(device)||sessionStorage.getItem(device);
-  if(!secret)secret=crypto.randomUUID()+crypto.randomUUID();
+  let secret=sessionStorage.getItem(device);
+  try{secret??=localStorage.getItem(device);}catch{/* Session-only storage still works. */}
+  secret??=crypto.randomUUID()+crypto.randomUUID();
   sessionStorage.setItem(device,secret);
-  if(remember)localStorage.setItem(device,secret);
-  else localStorage.removeItem(device);
-  const result=await api('/public/crossover-readers',{method:'POST',body:JSON.stringify({cohort,name,returning,entry_key:secret})});
+  try{localStorage.setItem(device,secret);}catch{/* Reuse the key within this tab. */}
+  const result=await api('/public/crossover-readers',{method:'POST',body:JSON.stringify({cohort,name,entry_key:secret})});
   if(result.pending)return {request_code:result.request_code};
   if(result.cohort!==cohort||result.role!=='doctor')throw new Error('Incorrect reader group.');
   storeSession(key,result.token);
@@ -93,7 +83,11 @@ export async function logout(){
   const cohort=readerCohort(window.location.hash.slice(1).split('?')[0]);
   try{await api('/logout',{method:'POST'});}finally{
     if(sessionStorage.getItem(key)===token) sessionStorage.removeItem(key);
-    if(cohort)sessionStorage.removeItem(crossoverDeviceKey(cohort));
+    if(cohort){
+      const device=crossoverDeviceKey(cohort), current=sessionStorage.getItem(device);
+      try{if(current===null||current===localStorage.getItem(device))localStorage.removeItem(device);}catch{/* Storage may be disabled. */}
+      sessionStorage.removeItem(device);
+    }
     if(storageKey()===key)window.dispatchEvent(new Event('ct-session-ended'));
   }
 }
