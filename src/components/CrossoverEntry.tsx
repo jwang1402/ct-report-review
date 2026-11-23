@@ -21,10 +21,10 @@ export default function CrossoverEntry({cohort,onStart}:{cohort:Cohort;onStart:(
   }
   return <main className="login-page reader-entry"><form className="form-card login-card reader-entry-card" onSubmit={submit}>
     <div className="reader-entry-heading"><ScanLine size={30} aria-hidden="true"/><h1>CT Report Review</h1><p>{cohort==='senior'?'Senior radiologist':'Junior radiologist'}</p></div>
-    <label>Name<input autoComplete="name" maxLength={100} required disabled={busy} value={name} onChange={e=>{setName(e.target.value);setError('');setNameMismatch(false);}}/></label>
+    <label>Name<input autoComplete="name" maxLength={100} required disabled={busy} readOnly={!!pending} value={name} onChange={e=>{setName(e.target.value);setError('');setNameMismatch(false);}}/></label>
     {pending&&<p role="status">Ask your coordinator to link this browser using code <strong>{pending}</strong>, then select Continue.</p>}
     {error&&<p className="error" role="alert">{error}</p>}
     <button className="button primary full" disabled={busy||!name.trim()}>{busy?'Opening…':'Continue'}<ArrowRight size={16}/></button>
-    {nameMismatch&&<button className="button secondary" type="button" disabled={busy} onClick={()=>void switchReader()}>Switch reader</button>}
+    {(nameMismatch||pending)&&<button className="button secondary" type="button" disabled={busy} onClick={()=>void switchReader()}>{pending?'Use another name':'Switch reader'}</button>}
   </form></main>;
 }
