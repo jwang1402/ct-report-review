@@ -42,7 +42,9 @@ function Workspace({user}:{user:Identity}) {
         {isAdmin&&<NavLink to="/admin/results"><Activity size={15}/>Results</NavLink>}
         {isAdmin&&<NavLink to="/admin/reader-access">Reader access</NavLink>}
       </nav>
-      <div className="header-end"><span>{user.display_name||user.username}</span><button className="button secondary"
+      <div className={'header-end'+(user.cohort?' reader-account':'')}><span>{user.display_name||user.username}</span>
+        {user.cohort&&<button className="button secondary" onClick={()=>void logout('switch-reader').catch(()=>{})}>Switch reader</button>}
+        <button className="button secondary"
         title={user.public_study?'End this review session before leaving a shared computer':undefined}
         onClick={()=>void logout().catch(()=>{})}>{user.public_study?'End session':'Sign out'}</button></div>
     </header>

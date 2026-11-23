@@ -45,7 +45,7 @@ it('uses separate reader and admin routes and rejects retired reader links',asyn
   expect(workspaceRole('/radiologists-extra')).toBeNull();
 });
 
-it('recognizes a returning reader from the name-only form and forgets the device on explicit sign-out',async()=>{
+it('keeps the browser match after sign-out and uses the canonical name from the server on re-entry',async()=>{
   location.hash='#/junior';
   const browser=new Map<string,string>();
   vi.stubGlobal('localStorage',{getItem:(k:string)=>browser.get(k)??null,setItem:(k:string,v:string)=>browser.set(k,v),removeItem:(k:string)=>browser.delete(k)});
@@ -53,7 +53,7 @@ it('recognizes a returning reader from the name-only form and forgets the device
   vi.stubGlobal('fetch',vi.fn(async(url:string,init:RequestInit)=>{
     if(url.endsWith('/logout'))return Response.json({ok:true});
     requests.push(JSON.parse(String(init.body)));
-    return Response.json(requests.length===3?{pending:true,request_code:'link-code'}:{token:'test-session',role:'doctor',cohort:'junior',display_name:'Dr Lee'});
+    return Response.json({token:'test-session',role:'doctor',cohort:'junior',display_name:'Dr Lee'});
   }));
   const {enterReader,logout}=await import('./session');
   await enterReader('junior','Dr Lee');
@@ -62,10 +62,39 @@ it('recognizes a returning reader from the name-only form and forgets the device
   expect(requests[0]).toEqual(requests[1]);
   expect(requests[0]).not.toHaveProperty('returning');
   await logout();
-  expect(browser.size).toBe(0);
-  await expect(enterReader('junior','Dr Lee')).resolves.toEqual({request_code:'link-code'});
-  expect(requests[2].entry_key).not.toBe(requests[0].entry_key);
+  expect(browser.size).toBe(1);
   expect(saved.has('ct-crossover-session:junior')).toBe(false);
+  saved.clear();
+  await expect(enterReader('junior','Dr Le')).resolves.toMatchObject({display_name:'Dr Lee',cohort:'junior'});
+  expect(requests[2]).toEqual({...requests[0],name:'Dr Le'});
+});
+
+it('switches to a fresh shared-browser key for the next reader without clearing other roles',async()=>{
+  location.hash='#/senior/workspace';
+  const browser=new Map<string,string>([['ct-crossover-device:junior','junior-device']]);
+  vi.stubGlobal('localStorage',{getItem:(k:string)=>browser.get(k)??null,setItem:(k:string,v:string)=>browser.set(k,v),removeItem:(k:string)=>browser.delete(k)});
+  saved.set('ct-review-session','admin-token');
+  saved.set('ct-crossover-session:junior','junior-token');
+  const requests:{name:string;entry_key:string}[]=[];
+  vi.stubGlobal('fetch',vi.fn(async(url:string,init:RequestInit)=>{
+    if(url.endsWith('/logout'))return Response.json({ok:true});
+    const input=JSON.parse(String(init.body));requests.push(input);
+    return Response.json({token:'senior-'+requests.length,role:'doctor',cohort:'senior',display_name:input.name});
+  }));
+  const {enterReader,logout,sessionToken}=await import('./session');
+  await enterReader('senior','First Reader');
+  await enterReader('senior','Second Reader');
+  expect(requests[1].entry_key).toBe(requests[0].entry_key);
+  expect(sessionToken()).toBe('senior-2');
+  await logout('switch-reader');
+  expect(sessionToken()).toBe('');
+  expect(saved.has('ct-crossover-device:senior')).toBe(false);
+  expect(browser.has('ct-crossover-device:senior')).toBe(false);
+  expect(browser.get('ct-crossover-device:junior')).toBe('junior-device');
+  expect(saved.get('ct-crossover-session:junior')).toBe('junior-token');
+  expect(saved.get('ct-review-session')).toBe('admin-token');
+  await enterReader('senior','New Reader');
+  expect(requests[2].entry_key).not.toBe(requests[0].entry_key);
 });
 
 it('exports the entered name and the individual reviewer identifier and keeps spreadsheet formulas inert',()=>{

@@ -47,7 +47,7 @@ export async function login(username:string,password:string){
 }
 export interface Identity {username:string;role:'admin'|'doctor';display_name?:string;public_study?:string;cohort?:Cohort}
 const crossoverDeviceKey=(cohort:Cohort)=>'ct-crossover-device:'+cohort;
-export async function enterReader(cohort:Cohort,name:string):Promise<Identity|{request_code:string}>{
+export async function enterReader(cohort:Cohort,name:string):Promise<Identity>{
   const key=storageKey(), device=crossoverDeviceKey(cohort);
   let secret=sessionStorage.getItem(device);
   try{secret??=localStorage.getItem(device);}catch{/* Session-only storage still works. */}
@@ -55,8 +55,8 @@ export async function enterReader(cohort:Cohort,name:string):Promise<Identity|{r
   sessionStorage.setItem(device,secret);
   try{localStorage.setItem(device,secret);}catch{/* Reuse the key within this tab. */}
   const result=await api('/public/crossover-readers',{method:'POST',body:JSON.stringify({cohort,name,entry_key:secret})});
-  if(result.pending)return {request_code:result.request_code};
-  if(result.cohort!==cohort||result.role!=='doctor')throw new Error('Incorrect reader group.');
+  if(result.cohort!==cohort||result.role!=='doctor'||typeof result.display_name!=='string'||!result.display_name)
+    throw new Error('Unable to open the reader workspace. Please try again.');
   storeSession(key,result.token);
   return {username:'',role:'doctor',display_name:result.display_name,cohort};
 }
@@ -78,12 +78,12 @@ export async function joinReview(prefix:string,name:string):Promise<Identity>{
   sessionStorage.removeItem(cache);
   return {username:identity.username,role:'doctor',display_name:identity.display_name,public_study:identity.public_study};
 }
-export async function logout(){
+export async function logout(mode?:'switch-reader'){
   const key=storageKey(), token=sessionToken();
   const cohort=readerCohort(window.location.hash.slice(1).split('?')[0]);
   try{await api('/logout',{method:'POST'});}finally{
     if(sessionStorage.getItem(key)===token) sessionStorage.removeItem(key);
-    if(cohort){
+    if(cohort&&mode==='switch-reader'){
       const device=crossoverDeviceKey(cohort), current=sessionStorage.getItem(device);
       try{if(current===null||current===localStorage.getItem(device))localStorage.removeItem(device);}catch{/* Storage may be disabled. */}
       sessionStorage.removeItem(device);

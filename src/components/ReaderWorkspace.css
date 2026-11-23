@@ -91,6 +91,8 @@
   .reader-nav .brand { gap: 7px; font-size: 15px; }
   .reader-nav .brand-icon { width: 30px; height: 30px; }
   .reader-nav .header-end { width: 100%; max-width: none; justify-content: flex-end; }
+  .reader-nav .reader-account { grid-column: 1 / -1; }
+  .reader-account > span { margin-right: auto; }
 }
 @media (max-width:720px) {
   .header:not(.reader-nav) nav { overflow-x: auto; gap: 12px; }
