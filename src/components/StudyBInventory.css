@@ -1,0 +1,50 @@
+.study-b-inventory {
+  margin-bottom: 20px;
+}
+.case-overview-title {
+  margin: 0 0 10px;
+}
+.study-b-inventory > .section-heading {
+  flex-wrap: wrap;
+}
+.study-b-inventory-body {
+  padding: 14px clamp(16px, 2vw, 26px);
+}
+.study-b-inventory-body p {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.study-b-inventory-body details {
+  margin-top: 8px;
+}
+.study-b-inventory-body summary {
+  width: fit-content;
+  cursor: pointer;
+  color: var(--status-ink);
+}
+.study-b-inventory-body ul {
+  list-style: none;
+  padding: 0;
+  margin: 10px 0 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(145px, 1fr));
+  gap: 6px;
+}
+.study-b-inventory-body li a {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 8px;
+}
+.study-b-inventory-body li a:hover {
+  background: #edf4ff;
+}
+.study-b-inventory-body li span {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 12px;
+}

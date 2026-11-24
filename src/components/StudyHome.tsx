@@ -4,6 +4,7 @@ import {useStudyData,type StudyListItem} from '../services/blindStudy';
 import type {Identity} from '../services/session';
 import {CaseTable} from './BlindCases';
 import {isStudyACase} from '../services/studyDisplay';
+import {StudyBInventory} from './StudyBInventory';
 
 export default function StudyHome({role}:{role:Identity['role']}) {
   const admin=role==='admin';
@@ -16,13 +17,14 @@ export default function StudyHome({role}:{role:Identity['role']}) {
         <h1>CT Report Review</h1><p>Clinical evaluation of AI-generated reports against CT imaging data</p></>:
         <h1>{studyATitle}</h1>}
     </div>{admin&&<Link className="button primary" to="/admin/upload"><Plus size={16}/>Upload Case</Link>}</div>
+    {admin&&<><StudyBInventory/><h2 className="case-overview-title">{studyATitle==='Study A'?'Study A':'Blinded report review'}</h2></>}
     <div className="summary-strip">
       <div><ScanLine/><span>{admin?'Published cases':'Cases'}<strong>{cases?.length??'—'}</strong></span></div>
       <div><FileText/><span>{admin?'Model reports':'Reports'}<strong>{cases?cases.reduce((sum,c)=>sum+(c.report_count??4),0):'—'}</strong></span></div>
       <div><Check/><span>{admin?'Fully reviewed cases':'Cases reviewed'}<strong>{cases?.filter(c=>c.scored).length??'—'}</strong></span></div>
     </div>
     <section className="work-card">
-      <div className="section-heading"><h2>Case workspace</h2>{admin&&<span className="muted">Published studies</span>}
+      <div className="section-heading"><h2>Case workspace</h2>
         <button className="button secondary push-right" disabled={!data&&!error} onClick={refresh}><RefreshCw size={14}/>Refresh Cases</button>
       </div>
       {error?<p className="global-error" role="alert">{error}</p>:cases?<CaseTable role={role} cases={cases} compact={admin} scrollable={!admin}/>:

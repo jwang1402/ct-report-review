@@ -10,10 +10,11 @@ interface Props {
   allowPublic?:boolean;
   onLinks:(links:Record<string,string>,signal:AbortSignal)=>void|Promise<void>;
   successMessage?:string;
+  uploadLabel?:string;
   onBusyChange?:(value:boolean)=>void;
   links?:Record<string,string>;
 }
-export default function DriveFolderUpload({packets,disabled,onLinks,onBusyChange,allowPublic=false,successMessage}:Props) {
+export default function DriveFolderUpload({packets,disabled,onLinks,onBusyChange,allowPublic=false,successMessage,uploadLabel}:Props) {
   const [ready,setReady]=useState(false),[connected,setConnected]=useState(false);
   const [folder,setFolder]=useState<{id:string;name:string}|null>(null),[busy,setBusy]=useState(false);
   const [status,setStatus]=useState(''),[error,setError]=useState('');
@@ -39,7 +40,7 @@ export default function DriveFolderUpload({packets,disabled,onLinks,onBusyChange
   }
   if(!driveUploadConfigured)return null;
   return <section className="work-card study-panel"><h2>Upload CTs to Google Drive</h2>
-    <p>{allowPublic?'Choose a dedicated Drive folder set to Anyone with the link (Viewer). Upload only the CTs approved for public sharing.':'Select a dedicated, restricted folder shared with your readers.'} The verified links will appear below.</p>
+    <p>{allowPublic?'Choose a dedicated Drive folder set to Anyone with the link (Viewer). Upload only the CTs approved for public sharing.':'Select a dedicated, restricted folder shared with your readers.'}</p>
     <div className="actions">
       <button className="button secondary" disabled={!ready||disabled||busy}
         onClick={()=>void perform(async()=>{await authorizeDrive();setConnected(true);setFolder(null);sessions.current.clear();})}>
@@ -54,7 +55,7 @@ export default function DriveFolderUpload({packets,disabled,onLinks,onBusyChange
         const result=await uploadPrivateFolder(packets,folder.id,sessions.current,signal,setStatus,allowPublic);
         signal.throwIfAborted();await onLinks(result,signal);signal.throwIfAborted();
         setStatus(successMessage??('Verified '+packets.cases.length+' CT links. The study is ready to publish.'));
-      })}>Upload and verify CTs</button>
+      })}>{uploadLabel??'Upload and verify CTs'}</button>
       {busy&&status&&<button className="button secondary" onClick={()=>op.current?.abort()}>Pause</button>}
     </div></>}
     {status&&<p role="status">{status}</p>}

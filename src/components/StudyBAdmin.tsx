@@ -1,5 +1,5 @@
 import {useEffect,useRef,useState} from 'react';
-import {Link} from 'react-router-dom';
+import {Link,useSearchParams} from 'react-router-dom';
 import {Check,Download,FolderOpen,LockKeyhole,Plus,RefreshCw,Upload,X} from 'lucide-react';
 import {api} from '../services/session';
 import {useStudyData} from '../services/blindStudy';
@@ -13,6 +13,8 @@ import DriveFolderUpload from './DriveFolderUpload';
 import {message,saveFile} from '../utils';
 import {blankCase,errorLabels,sessionDate,type Assessment,type CaseConfig,type CaseEntry,type Configuration,type RecordedError,type ResultReading,type Results} from '../services/studyB';
 import {caseIds,readConfiguration} from '../services/studyBImport';
+import {studyBUploadCount} from '../services/studyBInventory';
+import {driveFileId} from '../services/restrictedDrive';
 import {findingNames,findings} from '../services/studyAReview';
 import {StudyBAnalysis,type StudyBAnalysisData} from './StudyBAnalysis';
 import './StudyB.css';
@@ -50,29 +52,45 @@ function EntryList({title,prefix,items,change,readOnly}:{title:string;prefix:str
 }
 
 type UploadActivity={active:boolean;driveBusy:boolean;setDriveBusy:(value:boolean)=>void};
-function ConfigEditor({data,reload,active,driveBusy,setDriveBusy}:{data:Configuration;reload:()=>void}&UploadActivity) {
+function ConfigEditor({data,active,driveBusy,setDriveBusy}:{data:Configuration}&UploadActivity) {
+  const [saved,setSaved]=useState(data);
   const [rows,setRows]=useState<CaseConfig[]>(data.cases);
-  const [id,select]=useState('B01');
+  const [params,setParams]=useSearchParams();
+  const requested=params.get('case');
+  const [id,select]=useState(requested&&caseIds.includes(requested)?requested:'B01');
+  useEffect(()=>{if(active&&requested&&caseIds.includes(requested))select(requested);},[active,requested]);
   const [dirty,setDirty]=useState(false),[busy,setBusy]=useState(false);
+  const [retrySave,setRetrySave]=useState(false);
   const [error,setError]=useState(''),[notice,setNotice]=useState('');
   const [verified,setVerified]=useState<Record<string,string>>({});
   const [packets,setPackets]=useState<DriveImagePackets|null>(null);
   const [approved,setApproved]=useState(false);
+  const [manageFiles,setManageFiles]=useState(false);
   const operations=useRef<AbortController|null>(null);
   useEffect(()=>()=>operations.current?.abort(),[]);
   useWarn(dirty||busy||driveBusy);
-  const frozen=data.status==='frozen';
+  const frozen=saved.status==='frozen';
+  const uploaded=studyBUploadCount(saved.cases);
+  const canOpen=studyBUploadCount(rows)===caseIds.length&&rows.every(c=>c.reference.trim());
   const row=rows.find(x=>x.case_id===id)??blankCase(id);
+  const savedLink=saved.cases.find(c=>c.case_id===id)?.drive_url;
+  function chooseCase(value:string){
+    select(value);setParams({study:'B',case:value},{replace:true});setNotice('');
+  }
   function update(patch:Partial<CaseConfig>){
     const next={...row,...patch};
     if(next.size!==row.size||next.sha256!==row.sha256)setPackets(null);
     setRows(r=>[...r.filter(x=>x.case_id!==id),next].sort((a,b)=>a.case_id.localeCompare(b.case_id)));
     setDirty(true);setNotice('');setError('');
   }
+  async function persist(cases:CaseConfig[],freeze:boolean){
+    const receipt:Configuration=await api('/admin/study-b',{method:'PUT',body:JSON.stringify({version:saved.version,cases,freeze})});
+    setSaved(receipt);setRows(receipt.cases);setDirty(false);setRetrySave(false);
+  }
   async function save(freeze:boolean){
     if(freeze&&!window.confirm('Freeze these 10 cases, reference findings, and model drafts and open Study B to readers?'))return;
     setBusy(true);setError('');
-    try{await api('/admin/study-b',{method:'PUT',body:JSON.stringify({version:data.version,cases:rows,freeze})});setDirty(false);reload();}
+    try{await persist(rows,freeze);setNotice(freeze?'Study B is open to readers.':'Changes saved.');}
     catch(e){setError(message(e));}finally{setBusy(false);}
   }
   async function inspect(file:File){
@@ -96,7 +114,7 @@ function ConfigEditor({data,reload,active,driveBusy,setDriveBusy}:{data:Configur
       if(file.size>3*1024**2)throw new Error('Choose a Study B configuration under 3 MiB.');
       const next=readConfiguration(await file.text());
       if((rows.length||dirty)&&!window.confirm('Replace the local case configuration with this file? Changes take effect when saved.'))return;
-      setPackets(null);setVerified({});setRows(next);select(next[0]?.case_id??'B01');setDirty(true);setError('');setNotice('Configuration loaded. Save draft or freeze when ready.');
+      setPackets(null);setRetrySave(false);setVerified({});setRows(next);chooseCase(next[0]?.case_id??'B01');setDirty(true);setError('');setNotice('Configuration loaded. Select Save changes to keep it.');
     }catch(e){setError(message(e));}
   }
   async function prepareFiles(files:File[]){
@@ -129,50 +147,65 @@ function ConfigEditor({data,reload,active,driveBusy,setDriveBusy}:{data:Configur
       }
     }finally{if(!signal.aborted)setNotice('');}
     signal.throwIfAborted();
-    setRows(previous=>previous.map(c=>links[c.case_id]?{...c,drive_url:links[c.case_id]}:c));
-    setVerified(previous=>({...previous,...verifiedLinks}));setDirty(true);setError('');setNotice('');
+    const linked=rows.map(c=>links[c.case_id]?{...c,drive_url:links[c.case_id]}:c);
+    setRows(linked);setVerified(previous=>({...previous,...verifiedLinks}));setDirty(true);setError('');
+    setNotice('Saving CT links and reports to Study B…');
+    try{await persist(linked,false);setNotice('');}
+    catch(e){
+      setRetrySave(true);setNotice('');setError('The CTs are on Drive, but the website could not confirm the save. '+message(e));
+    }
+    setPackets(null);
   }
-  return <section className="work-card"><div className="sb-subhead"><div><h2>Case configuration</h2>
-    <p className="sb-hint">{frozen?'Frozen for data collection.':'Prepare 10 de-identified chest CT examinations with an independent expert reference.'}</p></div>
-    <span className="badge">{frozen?'Frozen':rows.length+' / 10 configured'}</span></div>
-    {!frozen&&<div className="sb-bulk">
+  return <section className="work-card"><div className="sb-subhead"><div>
+    <h2>{uploaded===caseIds.length?'Upload complete':'Study B cases'}</h2>
+    <p className="sb-hint" role="status">{uploaded}/10 cases uploaded · {frozen?'Open to readers':'Not open to readers'}</p></div>
+    {saved.cases.length>0&&<Link className="button secondary" to="/admin/cases">View cases</Link>}</div>
+    {!frozen&&uploaded===caseIds.length&&<div className="sb-file-options"><button type="button" className="button secondary" aria-expanded={manageFiles}
+      disabled={busy||driveBusy} onClick={()=>setManageFiles(v=>!v)}>Manage CT files</button></div>}
+    {!frozen&&(uploaded<caseIds.length||manageFiles)&&<div className="sb-bulk">
       <h3>Bulk upload</h3>
-      <p className="sb-hint">Choose the Study B ZIP with the CTs and drafts, or select the B01–B10 CT files together.</p>
+      <p className="sb-hint">Select Study_B_Upload.zip to upload the CTs and their MORPH-CT drafts together.</p>
       <label className="button secondary"><Upload size={14}/>Choose Study B files<input aria-label="Select Study B files" type="file" multiple accept=".zip,.gz" className="file-hidden" disabled={busy||driveBusy}
         onChange={e=>{const files=Array.from(e.target.files??[]);e.target.value='';void prepareFiles(files);}}/></label>
       {packets&&<><p>{packets.cases.length} CT files ready</p>
         {driveUploadConfigured?<><label className="sb-checkbox"><input type="checkbox" checked={approved} disabled={busy||driveBusy}
           onChange={e=>setApproved(e.currentTarget.checked)}/>These CTs are approved for public sharing</label>
           {active&&approved&&<DriveFolderUpload packets={packets} allowPublic disabled={busy} onBusyChange={setDriveBusy} onLinks={applyUpload}
-            successMessage="CT links filled in. Save the configuration draft below."/>}</>:<p>Google Drive upload is unavailable in this deployment. Enter the file links below.</p>}
+            uploadLabel="Upload Study B" successMessage=""/>}</>:<p>Google Drive upload is unavailable in this deployment. Add your CT links under Advanced import and CT links.</p>}
       </>}
     </div>}
-    {(error||notice)&&<div className="sb-statusline">{error&&<p className="error" role="alert">{error}</p>}{notice&&<p role="status">{notice}</p>}</div>}
+    {(error||notice||retrySave)&&<div className="sb-statusline">{error&&<p className="error" role="alert">{error}</p>}{notice&&<p role="status">{notice}</p>}
+      {retrySave&&<button type="button" className="button secondary" disabled={busy||driveBusy} onClick={()=>void save(false)}>Retry save</button>}</div>}
     <fieldset className="sb-admin-fields" disabled={busy||driveBusy}>
+      <div className="actions"><label className="sb-compact">Examination<select value={id} onChange={e=>chooseCase(e.target.value)}>{caseIds.map(x=><option key={x}>{x}</option>)}</select></label>
+      {savedLink&&driveFileId(savedLink)&&<a className="button secondary" href={savedLink} target="_blank" rel="noreferrer">Open CT in Drive</a>}</div>
+      <details className="sb-advanced"><summary>Advanced import and CT links</summary>
+      <div className="sb-advanced-body">
       <div className="sb-admin-tools">
         <button className="button secondary" onClick={()=>exportJSON({cases:frozen||rows.length?rows:caseIds.map(blankCase)},'study-b-configuration')}><Download size={14}/>{rows.length?'Export configuration':'Download template'}</button>
         {!frozen&&<label className="button secondary"><Upload size={14}/>Import JSON<input type="file" className="file-hidden" accept=".json,application/json" onChange={e=>{const f=e.target.files?.[0];e.target.value='';if(f)void importFile(f);}}/></label>}
       </div>
-      <label className="sb-compact">Examination<select value={id} onChange={e=>{select(e.target.value);setError('');setNotice('');}}>{caseIds.map(x=><option key={x}>{x}</option>)}</select></label>
       <label>CT file link<input value={row.drive_url} placeholder="Google Drive file URL" readOnly={frozen} onChange={e=>update({drive_url:e.target.value})}/></label>
       <div className="sb-admin-grid"><label>Size (bytes)<input type="number" min="0" value={row.size||''} readOnly={frozen} onChange={e=>update({size:Number(e.target.value)})}/></label>
       <label>SHA-256<input value={row.sha256} readOnly={frozen} maxLength={64} onChange={e=>update({sha256:e.target.value.trim().toLowerCase()})}/></label></div>
       <div className="actions">{!frozen&&<label className="button secondary"><FolderOpen size={14}/>Read size and checksum from CT<input type="file" accept=".gz" className="file-hidden" onChange={e=>{const f=e.target.files?.[0];e.target.value='';if(f)void inspect(f);}}/></label>}
       <button type="button" className="button secondary" disabled={!row.drive_url||!row.size||!row.sha256} onClick={()=>void verify()}><Check size={14}/>Verify CT link</button>
       {verified[id]===[row.drive_url,row.size,row.sha256].join('|')&&<span className="badge">Verified</span>}</div>
+      </div></details>
       <label>MORPH-CT draft<textarea rows={5} maxLength={48000} value={row.draft} readOnly={frozen} onChange={e=>update({draft:e.target.value})}/></label>
       <label>Independent expert reference<textarea rows={5} maxLength={48000} value={row.reference} readOnly={frozen} onChange={e=>update({reference:e.target.value})}/></label>
       <EntryList title="Reference key findings" prefix="ref-" items={row.reference_findings} change={v=>update({reference_findings:v})} readOnly={frozen}/>
       <EntryList title="Errors in the original draft" prefix="err-" items={row.draft_errors} change={v=>update({draft_errors:v})} readOnly={frozen}/>
-      {!frozen&&<div className="sb-admin-tools"><button type="button" className="button secondary" disabled={!dirty} onClick={()=>void save(false)}>Save configuration draft</button>
-      <button type="button" className="button primary" disabled={rows.length!==10} onClick={()=>void save(true)}><LockKeyhole size={14}/>Freeze and open study</button></div>}
+      {!frozen&&<><p className="sb-hint">{rows.filter(c=>c.reference.trim()).length}/10 independent expert references entered. Complete the references before opening Study B to readers.</p>
+        <div className="sb-admin-tools"><button type="button" className="button secondary" disabled={!dirty} onClick={()=>void save(false)}>Save changes</button>
+        <button type="button" className="button primary" disabled={!canOpen} onClick={()=>void save(true)}><LockKeyhole size={14}/>Freeze and open study</button></div></>}
     </fieldset></section>;
 }
 
 export function StudyBConfiguration(activity:UploadActivity){
   const {data,error,refresh}=useStudyData<Configuration>('/admin/study-b');
   if(!data)return <p role={error?'alert':'status'}>{error??'Loading configuration…'} {error&&<button className="button secondary" onClick={refresh}>Retry</button>}</p>;
-  return <ConfigEditor key={data.version} data={data} reload={refresh} {...activity}/>;
+  return <ConfigEditor key={data.version} data={data} {...activity}/>;
 }
 
 function AssessmentForm({reading,c,onDone}:{reading:ResultReading;c:CaseConfig;onDone:()=>void}) {

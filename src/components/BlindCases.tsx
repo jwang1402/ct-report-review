@@ -12,6 +12,7 @@ import {ReportFrame} from './ReportFrame';
 import {StudyAReview} from './StudyAReview';
 import type {StudyAReport} from '../services/studyAReview';
 import {caseDisplayLabel,isStudyACase} from '../services/studyDisplay';
+import {StudyBInventory} from './StudyBInventory';
 import {ResizablePanel,ResizablePanelGroup,ResizableHandle} from './Resizable';
 import type {Identity} from './AuthGate';
 import './CaseWorkspace.css';
@@ -47,12 +48,18 @@ export function CaseTable({role,cases,compact=false,scrollable=false}:{role:Role
 
 export function StudyList({role}:{role:Role}) {
   const {data,error,refresh}=useStudyData<{cases:StudyListItem[]}>('/blind/cases');
+  const admin=role==='admin';
+  const caseGroup=data?.cases.length&&data.cases.every(c=>isStudyACase(c.case_id))?'Study A':'Blinded report review';
   return <main className="page"><div className="page-heading"><div>
-    <span className="eyebrow">CLINICAL REVIEW</span><h1>Case library {data&&<span className="heading-count">{data.cases.length}</span>}</h1>
+    <span className="eyebrow">CLINICAL REVIEW</span><h1>Case library {!admin&&data&&<span className="heading-count">{data.cases.length}</span>}</h1>
     <p>Open a study to load its CT and review the reports.</p></div><div className="actions">
-      <button className="button secondary" disabled={!data&&!error} onClick={refresh}><RefreshCw size={15}/>Refresh Cases</button>
-      {role==='admin'&&<Link className="button primary" to="/admin/upload"><Plus size={15}/>Upload Case</Link>}
-    </div></div><div className="work-card">
+      {admin?<Link className="button primary" to="/admin/upload"><Plus size={15}/>Upload Case</Link>:
+        <button className="button secondary" disabled={!data&&!error} onClick={refresh}><RefreshCw size={15}/>Refresh Cases</button>}
+    </div></div>
+    {admin&&<StudyBInventory/>}
+    <div className="work-card">
+      {admin&&<div className="section-heading"><h2>{caseGroup} {data&&<span className="heading-count">{data.cases.length}</span>}</h2>
+        <button className="button secondary push-right" disabled={!data&&!error} onClick={refresh}><RefreshCw size={15}/>Refresh Cases</button></div>}
       {error?<div className="empty" role="alert">{error}</div>:data?<CaseTable role={role} cases={data.cases}/>:<div className="empty" role="status"><span className="spinner"/>Loading published cases…</div>}
     </div></main>;
 }
