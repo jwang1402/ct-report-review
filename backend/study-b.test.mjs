@@ -158,6 +158,31 @@ test('reference migration locks previously assessed cases and preserves their or
   await fail(call(admin,'PUT',adminPath+'/references',{...cases[0],version:0}),409);
 });
 
+test('untouched legacy AI text stays in the reference; a reader can explicitly copy, save and submit that text',async t=>{
+  const {sql,admin,adminPath,answers,call,configure,path,user}=fixture(t);
+  await configure(0,true);
+  const junior=user('j','junior');
+  const {cases}=await call(junior,'GET',path);
+  const id=cases[0].case_id;
+  const url=path+'/cases/'+id;
+  const reading=await call(junior,'POST',url+'/open',{period:1});
+  assert.equal(reading.condition,'with_ai');
+  assert.equal(reading.report,'');
+  assert.ok(reading.draft);
+  sql.prepare('UPDATE study_b_readings SET report=? WHERE username=? AND case_id=? AND period=1')
+    .run(reading.draft,junior.username,id);
+  const reopened=await call(junior,'POST',url+'/open',{period:1});
+  assert.equal(reopened.report,'');
+  assert.equal(reopened.draft,reading.draft);
+  assert.equal(reopened.started_at,reading.started_at);
+  const adminReading=async()=>(await call(admin,'GET',adminPath+'/results')).readings[0];
+  assert.equal((await adminReading()).report,'');
+  await call(junior,'PUT',url,{period:1,version:0,submit:false,report:reading.draft,findings:{}});
+  assert.equal((await call(junior,'POST',url+'/open',{period:1})).report,reading.draft);
+  await call(junior,'PUT',url,{period:1,version:1,submit:true,report:reading.draft,findings:answers});
+  assert.equal((await adminReading()).report,reading.draft);
+});
+
 test('three junior schedules are balanced, first opening starts timer, draft and final writes are versioned; second period enforces name re-entry and flips exposure',async t=>{
   const {db,sql,cases,path,adminPath,admin,call,user,fail,clock,answers,configure}=fixture(t);
   await configure(0,true);
@@ -175,7 +200,7 @@ test('three junior schedules are balanced, first opening starts timer, draft and
       const url=path+'/cases/'+c.case_id;
       const r=await call(u,'POST',url+'/open',{period:1});
       arms[c.case_id]=r.condition;
-      assert.equal(r.report,r.condition==='with_ai'?cases.find(row=>row.case_id===c.case_id).draft:'');
+      assert.equal(r.report,'');
       assert.equal(Object.hasOwn(r,'draft'),r.condition==='with_ai');
       assert.ok(!Object.hasOwn(r,'reference')&&!Object.hasOwn(r,'draft_errors'));
       let version=0;

@@ -22,7 +22,7 @@ export default function StudyBReportEditor({entry, report, onChange}: Props) {
       </div>
     </details>}
     <label className="sb-final-report-label" htmlFor="sb-report">Final report</label>
-    <p className="sb-hint" id="sb-report-help">{assisted ? 'Review and edit your report against the CT.' : 'Write your findings and impression.'}</p>
+    <p className="sb-hint" id="sb-report-help">{assisted ? 'Write your findings and impression. You can copy text from the draft above.' : 'Write your findings and impression.'}</p>
     <textarea id="sb-report" aria-describedby="sb-report-help" className="sb-report" rows={10} maxLength={48000}
       value={report} onChange={e=>onChange(e.currentTarget.value)}/>
   </>;

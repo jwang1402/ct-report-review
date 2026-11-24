@@ -58,6 +58,8 @@
 }
 .sb-workspace .case-sidebar .case-item{width:calc(100% - 12px);text-align:left}
 .sb-opened-at{color:var(--muted);font-size:12px}
+.sb-workspace-back{display:inline-flex;align-items:center;gap:5px;color:#1e4274;font-size:13px;font-weight:600;text-decoration:none}
+.sb-workspace-back:hover{text-decoration:underline}
 .sb-workspace .sb-mobile-cases{display:none}
 .study-a-workspace.sb-workspace .review-layout>.sb-stage{position:relative;display:grid;border:0;background:transparent;border-radius:0}
 .sb-stage>*{grid-area:1 / 1;min-width:0;min-height:0}

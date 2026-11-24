@@ -159,6 +159,11 @@ export async function studyBImage(db,user,caseId,now) {
   check(state.list.cases.some(task=>task.case_id===caseId && task.started),403,'Open your assigned reading before loading the CT.');
   return {drive_url:c.drive_url,size:c.size};
 }
+function readerReport(row,caseData) {
+  // Earlier versions seeded untouched assisted readings with the original model text.
+  if(row.arm==='with_ai' && row.version===0 && row.submitted_at==null && row.report===caseData.draft)return '';
+  return row.report;
+}
 async function openCase(db,user,caseId,body,now) {
   const state=await readerState(db,user,now);
   const period=body?.period;
@@ -174,13 +179,13 @@ async function openCase(db,user,caseId,body,now) {
   const condition=assignment(user.cohort,slot,state.config.order,caseId,period);
   // Both the read identity and the single ongoing timer are guarded by unique indexes.
   await db.prepare('INSERT INTO study_b_readings(username,case_id,period,arm,started_at,report) VALUES(?,?,?,?,?,?) ON CONFLICT DO NOTHING')
-    .bind(user.username,caseId,period,condition,now,condition==='with_ai'?c.draft:'').run();
+    .bind(user.username,caseId,period,condition,now,'').run();
   const row=await db.prepare('SELECT * FROM study_b_readings WHERE username=? AND case_id=? AND period=?')
     .bind(user.username,caseId,period).first();
   check(row,409,'Resume and submit the current reading before opening another CT.');
   check(row.submitted_at==null,409,'This report has already been submitted.');
   return {case_id:caseId,period,condition,imaging:{drive_url:c.drive_url,sha256:c.sha256,size:c.size},started_at:date(row.started_at),
-    version:row.version,report:row.report,findings:JSON.parse(row.findings_json),...(condition==='with_ai'?{draft:c.draft}:{})};
+    version:row.version,report:readerReport(row,c),findings:JSON.parse(row.findings_json),...(condition==='with_ai'?{draft:c.draft}:{})};
 }
 function validateFindings(values,final) {
   check(object(values) && Object.keys(values).every(k=>categories.includes(k)),400,'Invalid finding in the checklist.');
@@ -229,7 +234,7 @@ async function results(db,selection) {
     const c=config.cases.find(item=>item.case_id===r.case_id);
     return {username:r.username,display_name:r.display_name,cohort:r.cohort,case_id:r.case_id,period:r.period,condition:r.arm,
       started_at:date(r.started_at),submitted_at:date(r.submitted_at),elapsed_seconds:r.submitted_at==null?null:r.submitted_at-r.started_at,
-      report:r.report,findings:JSON.parse(r.findings_json),reference:c.reference,reference_findings:c.reference_findings,
+      report:readerReport(r,c),findings:JSON.parse(r.findings_json),reference:c.reference,reference_findings:c.reference_findings,
       draft:c.draft,draft_errors:c.draft_errors,assessment:parsedAssessment(r)};
   });
   if(selection!==undefined){

@@ -1,0 +1,13 @@
+.sb-case-directory :is(th,td):last-child {
+  text-align: right;
+}
+.sb-case-directory .review-link {
+  display: inline-flex;
+  min-height: 36px;
+}
+
+@media (max-width: 600px) {
+  .sb-home .sb-case-directory :is(th,td):nth-child(n + 2) {
+    display: table-cell;
+  }
+}

@@ -19,11 +19,11 @@ In [Study A results](https://jwang1402.github.io/ct-report-review/#/admin/result
 
 ## Study B readings and results
 
-Each senior writes one unaided report for each CT. Each junior reads all ten CTs twice. Each junior receives five AI drafts and five blank editors in the first session. The second session reverses the condition for every case. It becomes available 28 days after the junior's final submission in the first session and requires a new name confirmation.
+Each senior writes one unaided report for each CT. Each junior reads all ten CTs twice. In the first session, each junior can consult a MORPH-CT draft for five cases and reads the other five independently. The second session reverses the condition for each case. It becomes available 28 days after the junior's final submission in the first session and requires a new name confirmation.
 
-Select a case from the list and choose **Open CT** when ready to begin. Opening the CT starts the server timer; it includes image loading, breaks and editing, and stops on final submission. Readers can save their own drafts and resume them. Submit the current reading before opening another CT.
+Senior and junior readers both enter Study B through its workspace, which lists cases B01–B10 in numeric order and shows reading progress. Select a case to preview it, then choose **Open CT** when ready. Timing begins when the CT is opened and runs until final submission, including image loading, breaks and editing. Select **Save draft** before returning to the workspace to resume the report later. Submit the current reading before opening another CT.
 
-During an assisted reading, the original **MORPH-CT draft** is available for comparison. **Final report** begins with an editable copy and resumes with the reader’s saved text. During an unaided reading the final report starts blank. In both conditions, readers record their own present/absent findings and applicable laterality before submitting their final report.
+**Final report** starts blank in both conditions. During an assisted reading, the original **MORPH-CT draft** appears above the editor as a read-only reference. Readers can copy passages manually. When they resume a reading, the editor restores their saved text. Readers record their own present/absent findings and applicable laterality before submitting their final report.
 
 In **Readings and results**, use the independent reference to assess each final report. For each AI-assisted report, record which errors in the original draft were retained. The export includes the readings, timing, reader and case identifiers, assessments and paired analysis. Agreement uses the same cases and the same three juniors in both conditions. Reporting time uses paired readings by case and reader. Incomplete pairs and unassessed outcomes remain distinguishable from zero errors.
 

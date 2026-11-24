@@ -47,7 +47,7 @@ export default function Viewer({item,privateCase=false,verifiedFile}:{item:Viewe
   let closed=false,engine:cs.RenderingEngine|undefined,url:string|undefined,volumeId:string|undefined;const imageIds:string[]=[];const registeredFiles:number[]=[];const id=crypto.randomUUID();const viewIds=axes.map((_,i)=>`${id}-${i}`);const observers:ResizeObserver[]=[];const listeners:Array<()=>void>=[];
   setReady(false);setError('');
   const clean=()=>{observers.splice(0).forEach(o=>o.disconnect());listeners.splice(0).forEach(fn=>fn());tools.ToolGroupManager.destroyToolGroup(id);engine?.destroy();engine=undefined;if(volumeId&&cs.cache.getVolume(volumeId))cs.cache.removeVolumeLoadObject(volumeId);for(const imageId of imageIds){if(cs.cache.getImageLoadObject(imageId))cs.cache.removeImageLoadObject(imageId,{force:true});}registeredFiles.splice(0).forEach(index=>dicom.wadouri.fileManager.remove(index));if(url){URL.revokeObjectURL(url);url=undefined;}if(engineRef.current?.id===id){engineRef.current=null;groupRef.current=undefined;}};
-  (async()=>{try{
+  const setup=(async()=>{try{
    setProgress(undefined);setBytesLabel('');setStatus('Initializing CT viewer…');await init();if(closed)return;
    if(blob){
     setStatus('Preparing NIfTI volume…');
@@ -78,7 +78,11 @@ export default function Viewer({item,privateCase=false,verifiedFile}:{item:Viewe
    cs.eventTarget.addEventListener(cs.Enums.Events.IMAGE_VOLUME_MODIFIED,frameProgress);
    listeners.push(()=>cs.eventTarget.removeEventListener(cs.Enums.Events.IMAGE_VOLUME_MODIFIED,frameProgress));
    await new Promise<void>((resolve,reject)=>{
-    const cancel=()=>reject(controller.signal.reason);
+    const cancel=()=>{
+     // Stop queued slices. In-flight slices still share the loader's voxel buffer.
+     volume.cancelLoading();
+     resolve();
+    };
     controller.signal.addEventListener('abort',cancel,{once:true});
     volume.load((event:unknown)=>{
      controller.signal.removeEventListener('abort',cancel);
@@ -98,8 +102,14 @@ export default function Viewer({item,privateCase=false,verifiedFile}:{item:Viewe
    setDimensions(volume.dimensions.join(' × '));setSpacing(volume.spacing.map(s=>s.toFixed(2)).join(' × '));
    viewIds.forEach((vid,i)=>{const element=elements.current[i]!;const viewport=engine!.getViewport(vid) as cs.VolumeViewport;viewport.setProperties({voiRange:{lower:-160,upper:240}});const update=()=>{if(closed)return;setSlices(s=>s.map((old,j)=>j===i?{index:viewport.getSliceIndex(),total:viewport.getNumberOfSlices()}:old));};element.addEventListener(cs.Enums.Events.IMAGE_RENDERED,update);listeners.push(()=>element.removeEventListener(cs.Enums.Events.IMAGE_RENDERED,update));const observer=new ResizeObserver(()=>{if(!closed){engine?.resize(true,false);engine?.render();}});observer.observe(element);observers.push(observer);});
    engine.render();setReady(true);setStatus('Volume ready');setActiveTool('WindowLevel');setPreset('Soft Tissue');
-  }catch(e){if(!closed)setError(`Unable to initialize CT viewer. ${message(e)}`);}finally{if(closed)clean();}})();
-  return()=>{closed=true;controller.abort();clean();};
+  }catch(e){if(!closed)setError(`Unable to initialize CT viewer. ${message(e)}`);}})();
+  return()=>{
+   closed=true;controller.abort();
+   void setup.then(async()=>{
+    await Promise.allSettled(imageIds.map(id=>cs.cache.getImageLoadObject(id)?.promise));
+    clean();
+   });
+  };
  },[blob,selected,series]);
  function chooseTool(name:string){const group=groupRef.current;if(!group)return;['WindowLevel','Pan','Zoom','StackScroll'].forEach(t=>group.setToolPassive(t));group.setToolActive(name,{bindings:[{mouseButton:tools.Enums.MouseBindings.Primary}]});setActiveTool(name);}
  function applyPreset(name:string){setPreset(name);const [w,l]=presets[name];engineRef.current?.getViewports().forEach(v=>{(v as cs.VolumeViewport).setProperties({voiRange:{lower:l-w/2,upper:l+w/2}});v.render();});}

@@ -1,8 +1,9 @@
 import {useEffect,useRef,useState} from 'react';
-import {Check, ChevronRight, ClipboardList, RefreshCw, ScanLine} from 'lucide-react';
-import {Link} from 'react-router-dom';
+import {ArrowLeft, Check, ChevronRight, RefreshCw, ScanLine} from 'lucide-react';
+import {Link,Navigate,useSearchParams} from 'react-router-dom';
 import {api, ResponseError} from '../services/session';
 import {useStudyData} from '../services/blindStudy';
+import {inCaseOrder} from '../services/caseOrder';
 import {findingNames,findings,type Finding} from '../services/studyAReview';
 import {fillUnanswered,missingReading,sessionDate,sideLabels,type FindingRecord,type Reading,type Side,type StudyBList} from '../services/studyB';
 import {message} from '../utils';
@@ -89,10 +90,11 @@ function taskStatus(task:Task,currentId?:string){
   return task.started||task.case_id===currentId?'In progress':'Ready';
 }
 
-export default function StudyBWorkspace({onConfirmName}:{onConfirmName?:()=>void}={}) {
+export default function StudyBWorkspace() {
   const {data,error,refresh}=useStudyData<StudyBList>('/study-b');
   const [reading,setReading]=useState<Reading|null>(null);
-  const [selectedId,select]=useState('');
+  const [params,setParams]=useSearchParams();
+  const selectedId=params.get('case');
   const [opening,setOpening]=useState('');
   const [problem,setProblem]=useState('');
   const openingRef=useRef(false);
@@ -101,23 +103,26 @@ export default function StudyBWorkspace({onConfirmName}:{onConfirmName?:()=>void
     openingRef.current=true;setOpening(id);setProblem('');
     try{
       const entry:Reading=await api('/study-b/cases/'+encodeURIComponent(id)+'/open',{method:'POST',body:JSON.stringify({period:data.period})});
-      setReading(entry);select(entry.case_id);
+      setReading(entry);chooseCase(entry.case_id);
     }catch(e){setProblem(message(e));refresh();}finally{openingRef.current=false;setOpening('');}
   }
-  function chooseCase(id:string){select(id);setProblem('');}
-  function finish(){setReading(null);select('');setProblem('');refresh();}
+  function chooseCase(id:string){setParams({case:id},{replace:true});setProblem('');}
+  function finish(){setReading(null);setParams({},{replace:true});setProblem('');refresh();}
+  const backToWorkspace=<Link className="sb-workspace-back" to=".." relative="path"><ArrowLeft size={15}/>Workspace</Link>;
   if(data?.status==='ready'&&data.cases.length){
-    const currentId=reading?.case_id??data.cases.find(c=>c.started&&!c.submitted)?.case_id;
-    const selected=data.cases.find(c=>c.case_id===selectedId)??data.cases.find(c=>c.case_id===currentId)??data.cases.find(c=>!c.submitted)??data.cases[0];
+    const cases=inCaseOrder(data.cases);
+    const currentId=reading?.case_id??cases.find(c=>c.started&&!c.submitted)?.case_id;
+    const selected=cases.find(c=>c.case_id===selectedId)??cases.find(c=>c.case_id===currentId)??cases.find(c=>!c.submitted)??cases[0];
     const selectedStatus=taskStatus(selected,currentId);
     const showReading=reading?.case_id===selected.case_id;
     const image=reading?{case_id:reading.case_id,imaging:{...reading.imaging,type:'NIFTI' as const,filename:reading.case_id+'.nii.gz'}}:null;
     return <main className="review-page clinical-case study-a-workspace sb-workspace">
       <header className="review-topbar">
+        {backToWorkspace}
         <strong className="case-id">{selected.case_id}</strong>
         <span className="format-badge">Study B · Session {data.period}</span>
         <label className="sb-mobile-cases">Cases<select aria-label="Select examination" value={selected.case_id} disabled={!!opening}
-          onChange={e=>chooseCase(e.target.value)}>{data.cases.map(c=><option key={c.case_id} value={c.case_id}>{c.case_id} · {taskStatus(c,currentId)}</option>)}</select></label>
+          onChange={e=>chooseCase(e.target.value)}>{cases.map(c=><option key={c.case_id} value={c.case_id}>{c.case_id} · {taskStatus(c,currentId)}</option>)}</select></label>
         <span className="muted push-right">{data.cases.filter(c=>c.submitted).length} / {data.cases.length} submitted</span>
         {showReading&&reading&&<time className="sb-opened-at" dateTime={reading.started_at}>Opened {sessionDate(reading.started_at)}</time>}
         {!reading&&<button className="icon-button" type="button" aria-label="Refresh assignments" disabled={!!opening} onClick={()=>{setProblem('');refresh();}}><RefreshCw size={16}/></button>}
@@ -125,7 +130,7 @@ export default function StudyBWorkspace({onConfirmName}:{onConfirmName?:()=>void
       <ResizablePanelGroup direction="horizontal" className="review-layout sb-layout">
         <ResizablePanel defaultSize={14} minSize={10} maxSize={24}>
           <nav className="case-sidebar" aria-label="Study B cases"><div className="panel-header"><h2>Cases <span>{data.cases.length}</span></h2></div>
-            {data.cases.map(c=>{
+            {cases.map(c=>{
               const status=taskStatus(c,currentId),active=c.case_id===selected.case_id;
               return <button type="button" key={c.case_id} className={'case-item'+(active?' active':'')}
                 aria-label={c.case_id+', '+status} aria-current={active?'page':undefined} disabled={!!opening} onClick={()=>chooseCase(c.case_id)}>
@@ -162,17 +167,10 @@ export default function StudyBWorkspace({onConfirmName}:{onConfirmName?:()=>void
       </ResizablePanelGroup>
     </main>;
   }
-  return <main className="page sb-page"><div className="page-heading"><div><span className="eyebrow">Study B</span><h1>Reading workspace</h1></div>
-    <button className="button secondary" disabled={!!opening} onClick={()=>{setProblem('');refresh();}}><RefreshCw size={15}/>Refresh</button></div>
-    {(problem||error)&&<p role="alert" className="error">{problem||error}</p>}
-    {!data&&!error&&<div className="empty" role="status"><span className="spinner"/>Loading assignments…</div>}
-    {data&&<section className="work-card sb-library">
-      <div className="empty">{data.status==='complete'?<Check size={26}/>:data.status==='not_ready'?<ScanLine size={26}/>:<ClipboardList size={26}/>}
-        <h2>{data.status==='complete'?'All readings submitted':data.status==='washout'?'Session 1 complete':data.status==='confirm_name'?'Confirm your name for session 2':'No readings available yet'}</h2>
-        {data.status==='washout'&&<p>Session 2 opens {sessionDate(data.opens_at)}.</p>}
-        {data.status==='not_ready'&&<p>Your cases will appear when the coordinator opens the study.</p>}
-        {data.status==='confirm_name'&&(onConfirmName?<button className="button primary" onClick={onConfirmName}>Confirm name</button>:<Link className="button primary" to="/junior">Confirm name</Link>)}
-      </div>
-    </section>}
+  if(data)return <Navigate to=".." relative="path" replace/>;
+  return <main className="page sb-page">
+    {backToWorkspace}
+    {error?<div role="alert"><p className="error">{error}</p><button className="button secondary" onClick={refresh}><RefreshCw size={15}/>Retry</button></div>:
+      <div className="empty" role="status"><span className="spinner"/>Loading assignments…</div>}
   </main>;
 }
