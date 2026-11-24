@@ -89,6 +89,9 @@ input:not([type=checkbox]):not([type=range]),textarea,select{background:#fff;col
 .reader-filter select { width: auto; min-width: 10rem; }
 .reader-filter span { color: #405670; font-size: 13px; }
 .study-upload { max-width: 1100px; }
+.upload-study-selector { display: inline-flex; gap: 4px; padding: 3px; margin: 0 0 16px; border: 1px solid #c5d2e0; border-radius: 8px; }
+.upload-study-selector button { border: 0; border-radius: 5px; color: #334e67; background: transparent; font-weight: 600; padding: 8px 18px; }
+.upload-study-selector button[aria-pressed=true] { background: #203f62; color: #fff; }
 .study-panel { padding: 22px; margin-bottom: 16px; }
 .study-storage-status { margin-bottom: 16px; padding: 12px 16px; background: #f2f6fb; border: 1px solid #cbd6e4; border-radius: 8px; }
 .study-panel h2 { font-size: 18px; margin: 0 0 12px; color: #203750; }

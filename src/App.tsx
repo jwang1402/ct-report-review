@@ -53,7 +53,8 @@ function Workspace({user}:{user:Identity}) {
         {user.cohort==='senior'&&<Route path="/senior/study-a" element={<StudyHome role="doctor"/>}/>}
         {user.cohort==='senior'&&<Route path="/senior/cases/:caseId" element={<BlindCase role="doctor" publicReader/>}/>}
         {user.cohort&&<Route path={'/'+user.cohort+'/study-b'} element={<StudyBWorkspace onConfirmName={()=>navigate('/'+user.cohort,{state:{returnToStudyB:true}})}/>}/>}
-        {isAdmin&&<Route path="/admin/study-b" element={<StudyBAdmin/>}/>}
+        {isAdmin&&<Route path="/admin/study-b" element={<Navigate to="/admin/upload?study=B" replace/>}/>}
+        {isAdmin&&<Route path="/admin/study-b/results" element={<StudyBAdmin/>}/>}
         {isAdmin&&<Route path="/admin/reader-access" element={<CrossoverAccess/>}/>}
         {!user.cohort&&<Route path={home} element={<StudyHome role={user.role}/>}/>}
         <Route path={home+'/cases'} element={isAdmin?<StudyList role={user.role}/>:<Navigate to={home} replace/>}/>

@@ -29,7 +29,7 @@ export default function StudyHome({role}:{role:Identity['role']}) {
         <div className="empty" role="status"><span className="spinner"/><p>Loading published cases…</p></div>}
     </section>
     {admin&&<div className="home-bottom">
-      <Link to="/admin/study-b"><FileText size={20}/><div><h3>Study B</h3><p>Manage crossover cases, readings and assessments.</p></div><ArrowUpRight size={20}/></Link>
+      <Link to="/admin/study-b/results"><FileText size={20}/><div><h3>Study B readings</h3><p>Review crossover readings and assessments.</p></div><ArrowUpRight size={20}/></Link>
       <Link to="/admin/cases"><ScanLine size={20}/><div><h3>Clinical Review</h3><p>Inspect the CT study and evaluate each model report.</p></div><ArrowUpRight size={20}/></Link>
       <Link to="/admin/results"><Activity size={20}/><div><h3>Review results</h3><p>Explore individual ratings and export reviewer feedback.</p></div><ArrowUpRight size={20}/></Link>
     </div>}

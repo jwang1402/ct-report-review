@@ -1,4 +1,5 @@
 import {useEffect,useRef,useState} from 'react';
+import {Link} from 'react-router-dom';
 import {Check,Download,FolderOpen,LockKeyhole,Plus,RefreshCw,Upload,X} from 'lucide-react';
 import {api} from '../services/session';
 import {useStudyData} from '../services/blindStudy';
@@ -21,8 +22,8 @@ function useWarn(dirty:boolean){
   useEffect(()=>{if(!dirty)return;
     const before=(e:BeforeUnloadEvent)=>{e.preventDefault();e.returnValue='';};
     const navigate=(e:MouseEvent)=>{
-      const target=e.target instanceof Element?e.target.closest('a[href],button[data-sb-tab]'):null;
-      if(!target||target.getAttribute('aria-pressed')==='true'||target.getAttribute('target')==='_blank')return;
+      const target=e.target instanceof Element?e.target.closest('a[href]'):null;
+      if(!target||target.getAttribute('target')==='_blank')return;
       if(!window.confirm('Leave and discard unsaved changes?')){
         e.preventDefault();
         e.stopImmediatePropagation();
@@ -48,14 +49,15 @@ function EntryList({title,prefix,items,change,readOnly}:{title:string;prefix:str
   </div>)}{!readOnly&&<button type="button" className="button secondary" onClick={add} disabled={items.length>=64}><Plus size={14}/>Add item</button>}</div>;
 }
 
-function ConfigEditor({data,reload}:{data:Configuration;reload:()=>void}) {
+type UploadActivity={active:boolean;driveBusy:boolean;setDriveBusy:(value:boolean)=>void};
+function ConfigEditor({data,reload,active,driveBusy,setDriveBusy}:{data:Configuration;reload:()=>void}&UploadActivity) {
   const [rows,setRows]=useState<CaseConfig[]>(data.cases);
   const [id,select]=useState('B01');
   const [dirty,setDirty]=useState(false),[busy,setBusy]=useState(false);
   const [error,setError]=useState(''),[notice,setNotice]=useState('');
   const [verified,setVerified]=useState<Record<string,string>>({});
   const [packets,setPackets]=useState<DriveImagePackets|null>(null);
-  const [approved,setApproved]=useState(false),[driveBusy,setDriveBusy]=useState(false);
+  const [approved,setApproved]=useState(false);
   const operations=useRef<AbortController|null>(null);
   useEffect(()=>()=>operations.current?.abort(),[]);
   useWarn(dirty||busy||driveBusy);
@@ -141,7 +143,7 @@ function ConfigEditor({data,reload}:{data:Configuration;reload:()=>void}) {
       {packets&&<><p>{packets.cases.length} CT files ready</p>
         {driveUploadConfigured?<><label className="sb-checkbox"><input type="checkbox" checked={approved} disabled={busy||driveBusy}
           onChange={e=>setApproved(e.currentTarget.checked)}/>These CTs are approved for public sharing</label>
-          {approved&&<DriveFolderUpload packets={packets} allowPublic disabled={busy} onBusyChange={setDriveBusy} onLinks={applyUpload}
+          {active&&approved&&<DriveFolderUpload packets={packets} allowPublic disabled={busy} onBusyChange={setDriveBusy} onLinks={applyUpload}
             successMessage="CT links filled in. Save the configuration draft below."/>}</>:<p>Google Drive upload is unavailable in this deployment. Enter the file links below.</p>}
       </>}
     </div>}
@@ -167,10 +169,10 @@ function ConfigEditor({data,reload}:{data:Configuration;reload:()=>void}) {
     </fieldset></section>;
 }
 
-function ConfigTab(){
+export function StudyBConfiguration(activity:UploadActivity){
   const {data,error,refresh}=useStudyData<Configuration>('/admin/study-b');
   if(!data)return <p role={error?'alert':'status'}>{error??'Loading configuration…'} {error&&<button className="button secondary" onClick={refresh}>Retry</button>}</p>;
-  return <ConfigEditor key={data.version} data={data} reload={refresh}/>;
+  return <ConfigEditor key={data.version} data={data} reload={refresh} {...activity}/>;
 }
 
 function AssessmentForm({reading,c,onDone}:{reading:ResultReading;c:CaseConfig;onDone:()=>void}) {
@@ -246,11 +248,8 @@ function ResultsTab(){
   </section>{submitted.length>0&&<StudyBAnalysis readings={data.readings} overall={data.analysis}/>}</>;
 }
 export default function StudyBAdmin(){
-  const [tab,setTab]=useState<'cases'|'results'>('cases');
-  return <main className="page sb-page sb-admin"><div className="page-heading"><div><span className="eyebrow">Study B</span><h1>Crossover study</h1></div></div>
-    <div className="sb-admin-nav" role="group" aria-label="Study B administration">
-      <button type="button" data-sb-tab aria-pressed={tab==='cases'} onClick={()=>setTab('cases')}>Case configuration</button>
-      <button type="button" data-sb-tab aria-pressed={tab==='results'} onClick={()=>setTab('results')}>Readings and results</button>
-    </div>{tab==='cases'?<ConfigTab/>:<ResultsTab/>}
+  return <main className="page sb-page sb-admin"><div className="page-heading"><div><span className="eyebrow">Study B</span><h1>Readings and results</h1></div>
+    <Link className="button secondary" to="/admin/upload?study=B">Case configuration</Link></div>
+    <ResultsTab/>
   </main>;
 }

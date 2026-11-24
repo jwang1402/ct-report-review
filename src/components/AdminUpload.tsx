@@ -1,5 +1,5 @@
 import {useEffect,useRef,useState} from 'react';
-import {Link} from 'react-router-dom';
+import {Link,useSearchParams} from 'react-router-dom';
 import {parseStudyPackets,type StudyPackets} from '../services/studyPackets';
 import {uploadStudy,type UploadProgress} from '../services/studyUpload';
 import {useStudyData} from '../services/blindStudy';
@@ -12,6 +12,7 @@ import DriveFolderUpload from './DriveFolderUpload';
 import PublicStudyAccess from './PublicStudyAccess';
 import {hasHan} from '../../backend/english-ui.mjs';
 import {studyDisplayName} from '../services/studyDisplay';
+import {StudyBConfiguration} from './StudyBAdmin';
 
 const inputs=[
   {key:'images',label:'CT volumes',filename:'Reader_Images.zip'},
@@ -21,10 +22,33 @@ const inputs=[
 type Files=Partial<Record<typeof inputs[number]['key'],File>>;
 
 export default function AdminUpload() {
+  const [params,setParams]=useSearchParams();
+  const [driveBusyA,setDriveBusyA]=useState(false),[driveBusyB,setDriveBusyB]=useState(false);
+  const requested=params.get('study')?.toUpperCase()==='B'?'B':'A';
+  const study=driveBusyA?'A':driveBusyB?'B':requested;
+  // Keep selected files and unsaved case edits when switching between the two forms.
+  const [opened,setOpened]=useState({A:study==='A',B:study==='B'});
+  useEffect(()=>{
+    if(!opened[study])setOpened(previous=>({...previous,[study]:true}));
+  },[study,opened]);
+  return <main className="page study-upload">
+    <div className="page-heading"><h1>Upload Case</h1></div>
+    <div className="upload-study-selector" role="group" aria-label="Upload study">
+      <button type="button" disabled={driveBusyB} aria-pressed={study==='A'} aria-controls="upload-study-a" onClick={()=>{if(study!=='A')setParams({});}}>Study A</button>
+      <button type="button" disabled={driveBusyA} aria-pressed={study==='B'} aria-controls="upload-study-b" onClick={()=>{if(study!=='B')setParams({study:'B'});}}>Study B</button>
+    </div>
+    <div id="upload-study-a" hidden={study!=='A'}>{(study==='A'||opened.A)&&<StudyAUpload active={study==='A'} driveBusy={driveBusyA} setDriveBusy={setDriveBusyA}/>}</div>
+    <div id="upload-study-b" className="sb-admin" hidden={study!=='B'}>{(study==='B'||opened.B)&&<>
+      <StudyBConfiguration active={study==='B'} driveBusy={driveBusyB} setDriveBusy={setDriveBusyB}/>
+      <Link className="button secondary" to="/admin/study-b/results">Readings and results</Link>
+    </>}</div>
+  </main>;
+}
+
+function StudyAUpload({active,driveBusy,setDriveBusy}:{active:boolean;driveBusy:boolean;setDriveBusy:(value:boolean)=>void}) {
   const [files,setFiles]=useState<Files>({});
   const [source,setSource]=useState<'drive'|'r2'>('drive');
   const [links,setLinks]=useState<Record<string,string>>({});
-  const [driveBusy,setDriveBusy]=useState(false);
   const [publicAccess,setPublicAccess]=useState(false);
   const [restricted,setRestricted]=useState(false);
   const [studyName,setStudyName]=useState('Study A');
@@ -90,12 +114,11 @@ export default function AdminUpload() {
     } finally {operation.current=null;setBusy(null);}
   }
   const validPrefix=/^[A-Za-z0-9][A-Za-z0-9_-]{0,39}$/.test(prefix);
-  if(done)return <main className="page study-upload"><h1>{done==='published'?'Study published':'Study already published'}</h1>
+  if(done)return <section><h2>{done==='published'?'Study published':'Study already published'}</h2>
     <p>{studyDisplayName(prefix)} · {packets?.cases.length} cases</p>
     <div className="actions"><Link className="button primary" to="/admin/cases">View cases</Link>{publicAccess&&<Link className="button secondary" to={radiologistsPath} target="_blank" rel="noreferrer">Radiologist review link</Link>}</div>
-  </main>;
-  return <main className="page study-upload">
-    <div className="page-heading"><div><h1>Upload Case</h1><p>Import CT volumes and their four anonymous reports.</p></div></div>
+  </section>;
+  return <>
     {storage.data?.ready&&<section className="work-card study-panel"><label>CT storage
       <select value={source} disabled={!!busy||driveBusy} onChange={e=>{setSource(e.target.value as 'drive'|'r2');setPublicAccess(false);setRestricted(false);setProgress(null);setError('');setPhase('');}}>
         <option value="drive">Google Drive</option><option value="r2">Cloudflare R2</option>
@@ -137,7 +160,7 @@ export default function AdminUpload() {
               onChange={e=>setRestricted(e.currentTarget.checked)}/>Use assigned reader accounts for this study</label>
           </details>}
         </section>
-        {(publicAccess||restricted)&&<><DriveFolderUpload packets={packets} disabled={!!busy} allowPublic={publicAccess} links={links} onLinks={value=>{setLinks(value);setError('');}} onBusyChange={setDriveBusy}/>
+        {(publicAccess||restricted)&&<>{active&&<DriveFolderUpload packets={packets} disabled={!!busy} allowPublic={publicAccess} links={links} onLinks={value=>{setLinks(value);setError('');}} onBusyChange={setDriveBusy}/>}
         <DriveLinks allowPublic={publicAccess} caseIds={packets.cases.map(c=>c.case_id)} links={links} setLinks={value=>{setLinks(value);setError('');}} disabled={!!busy||driveBusy}/></>}
       </>}
       {(restricted||source==='r2')&&<section className="work-card study-panel"><h2>Assign readers</h2>
@@ -156,5 +179,5 @@ export default function AdminUpload() {
     </>}
     {error&&<p className="error" role="alert">{error}{progress&&' You can resume with the same files.'}</p>}
     <details className="study-panel"><summary>Manage access to published studies</summary><PublicStudyAccess/></details>
-  </main>;
+  </>;
 }

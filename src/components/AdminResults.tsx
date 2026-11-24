@@ -58,7 +58,7 @@ export default function AdminResults() {
   return <main className="page">
     <nav className="admin-results-switch" aria-label="Results protocol">
       <button type="button" aria-pressed={view==='study-a'} onClick={()=>setView('study-a')}>Study A</button>
-      <Link className="button secondary" to="/admin/study-b">Study B</Link>
+      <Link className="button secondary" to="/admin/study-b/results">Study B</Link>
       <button type="button" aria-pressed={view==='legacy'} onClick={()=>setView('legacy')}>Previous ratings</button>
     </nav>
     {view==='study-a'?<StudyAResults DeleteDialog={ConfirmDeleteReader}/>:<LegacyResults/>}
