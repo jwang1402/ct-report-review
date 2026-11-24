@@ -1,19 +1,19 @@
 import {useEffect,useRef,useState} from 'react';
 import {authorizeDrive,disconnectDrive,driveUploadConfigured,loadGoogle,selectDriveFolder,type UploadSession} from '../services/driveUpload';
-import {uploadPrivateFolder} from '../services/privateDriveFolder';
-import type {StudyPackets} from '../services/studyPackets';
+import {uploadPrivateFolder,type DriveImagePackets} from '../services/privateDriveFolder';
 import {message} from '../utils';
 import {hasHan} from '../../backend/english-ui.mjs';
 
 interface Props {
-  packets:StudyPackets;
+  packets:DriveImagePackets;
   disabled:boolean;
   allowPublic?:boolean;
-  onLinks:(links:Record<string,string>)=>void;
+  onLinks:(links:Record<string,string>,signal:AbortSignal)=>void|Promise<void>;
+  successMessage?:string;
   onBusyChange?:(value:boolean)=>void;
   links?:Record<string,string>;
 }
-export default function DriveFolderUpload({packets,disabled,onLinks,onBusyChange,allowPublic=false}:Props) {
+export default function DriveFolderUpload({packets,disabled,onLinks,onBusyChange,allowPublic=false,successMessage}:Props) {
   const [ready,setReady]=useState(false),[connected,setConnected]=useState(false);
   const [folder,setFolder]=useState<{id:string;name:string}|null>(null),[busy,setBusy]=useState(false);
   const [status,setStatus]=useState(''),[error,setError]=useState('');
@@ -52,7 +52,8 @@ export default function DriveFolderUpload({packets,disabled,onLinks,onBusyChange
       <button className="button primary" disabled={disabled||busy} onClick={()=>void perform(async signal=>{
         setStatus('Checking folder permissions and saved CTs…');
         const result=await uploadPrivateFolder(packets,folder.id,sessions.current,signal,setStatus,allowPublic);
-        signal.throwIfAborted();onLinks(result);setStatus('Verified '+packets.cases.length+' CT links. The study is ready to publish.');
+        signal.throwIfAborted();await onLinks(result,signal);signal.throwIfAborted();
+        setStatus(successMessage??('Verified '+packets.cases.length+' CT links. The study is ready to publish.'));
       })}>Upload and verify CTs</button>
       {busy&&status&&<button className="button secondary" onClick={()=>op.current?.abort()}>Pause</button>}
     </div></>}

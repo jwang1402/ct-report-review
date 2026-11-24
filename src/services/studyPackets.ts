@@ -31,7 +31,7 @@ function requireThat(ok: unknown, error: string): asserts ok {
   if (!ok) throw new Error(error);
 }
 
-async function filesIn(reader: ZipReader<Blob>, signal?: AbortSignal) {
+export async function filesIn(reader: ZipReader<Blob>, signal?: AbortSignal) {
   const files = new Map<string, FileEntry>();
   for await (const entry of reader.getEntriesGenerator()) {
     signal?.throwIfAborted();
@@ -42,7 +42,7 @@ async function filesIn(reader: ZipReader<Blob>, signal?: AbortSignal) {
   return files;
 }
 
-async function readText(files: Map<string, FileEntry>, name: string, signal?: AbortSignal) {
+export async function readText(files: Map<string, FileEntry>, name: string, signal?: AbortSignal) {
   const entry = files.get(name);
   const label = name==='最佳报告.csv'?'case order sheet':name;
   requireThat(entry && entry.uncompressedSize > 0 && entry.uncompressedSize <= maxTextBytes, 'Missing or oversized packet entry: ' + label);
@@ -130,7 +130,7 @@ async function readSharedReports(coordinator: Map<string, FileEntry>, reader: Ma
   return result;
 }
 
-async function scanBlob(archive: File, entry: FileEntry, signal?: AbortSignal): Promise<Blob> {
+export async function scanBlob(archive: File, entry: FileEntry, signal?: AbortSignal): Promise<Blob> {
   signal?.throwIfAborted();
   requireThat(entry.uncompressedSize >= 2 && entry.uncompressedSize <= 2 * 1024 ** 3, 'Unexpected size for ' + entry.filename);
   if (entry.compressionMethod === 0) {

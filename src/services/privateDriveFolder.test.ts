@@ -53,6 +53,18 @@ it('requires public read access before an approved upload',async()=>{
   await expect(uploadPrivateFolder(packets,folder,new Map(),new AbortController().signal,()=>{},true)).rejects.toThrow('Anyone with the link');
   expect(uploadDriveBlob).not.toHaveBeenCalled();
 });
+it('accepts other pinned case files on a partial upload and returns only selected links',async()=>{
+  const other={...c,case_id:'B02',sha256:'b'.repeat(64)};
+  const otherFile={...file,name:'B02.nii.gz',id:'other_verified_file',sha256Checksum:other.sha256};
+  service([otherFile,file]);
+  const selected={...packets,otherFolderCases:[other]};
+  expect(await uploadPrivateFolder(selected,folder,new Map(),new AbortController().signal,()=>{}))
+    .toEqual({Case01:'https://drive.google.com/file/d/'+file.id+'/view'});
+  expect(uploadDriveBlob).not.toHaveBeenCalled();
+  service([{...otherFile,sha256Checksum:'broken'}]);
+  await expect(uploadPrivateFolder(selected,folder,new Map(),new AbortController().signal,()=>{})).rejects.toThrow('SHA-256');
+  expect(uploadDriveBlob).not.toHaveBeenCalled();
+});
 it.each([[{...file,sha256Checksum:'invalid'}],[{...file,name:'Other.nii.gz'}],[file,file]])(
   'refuses mismatched hashes, names and duplicate files before uploading',async(...files)=>{
     service(files);await expect(run()).rejects.toThrow();expect(uploadDriveBlob).not.toHaveBeenCalled();

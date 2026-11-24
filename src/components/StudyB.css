@@ -33,6 +33,9 @@
 .sb-save-bar .actions{justify-content:flex-end;flex-wrap:wrap}.sb-save-bar p{margin:0 0 7px;font-size:13px}
 .sb-admin-nav{justify-content:flex-start;gap:5px;margin-bottom:14px}
 .sb-admin-tools{justify-content:flex-end;margin-top:12px}.sb-admin-fields{display:grid;gap:13px}
+.sb-bulk{padding:14px 18px;border-bottom:1px solid var(--line)}.sb-bulk>.button{margin:10px 0 0}
+.sb-bulk .work-card{margin:12px 0 0}.sb-bulk .sb-checkbox{margin:8px 0}
+.sb-statusline{padding:0 18px}
 .sb-admin-fields input,.sb-admin-fields textarea,.sb-admin-assess textarea,.sb-admin select{font-weight:400}
 .sb-admin-fields label.button{display:inline-flex;flex-direction:row;align-items:center}
 .sb-admin-grid{display:grid;grid-template-columns:1fr 1fr;gap:15px}.sb-admin .work-card{margin-bottom:18px}

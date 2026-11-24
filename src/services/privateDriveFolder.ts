@@ -1,5 +1,12 @@
 import {readDriveMetadata,uploadDriveBlob,verifyFolder,type UploadSession} from './driveUpload';
-import type {PacketCase,StudyPackets} from './studyPackets';
+
+export interface DriveCaseImage {case_id:string;size:number;sha256:string}
+export interface DriveImagePackets {
+  cases:DriveCaseImage[];
+  getImage:(caseId:string)=>Promise<Blob>;
+  // Previously configured images can share a folder with a partial upload.
+  otherFolderCases?:DriveCaseImage[];
+}
 
 interface DriveFile {id:string;name:string;size:string;sha256Checksum?:string;parents?:string[];resourceKey?:string}
 const fileFields='id,name,size,sha256Checksum,parents,resourceKey';
@@ -27,13 +34,13 @@ async function checkSharing(id:string,signal:AbortSignal,publicAccess:boolean) {
   if(publicAccess&&!linkViewer)throw new Error('Set the dedicated Drive folder to Anyone with the link (Viewer) before uploading the approved public cases.');
 }
 
-function verifyFile(file:DriveFile,c:PacketCase,folder:string) {
+function verifyFile(file:DriveFile,c:DriveCaseImage,folder:string) {
   if(!validId.test(file.id)||file.name!==c.case_id+'.nii.gz'||!file.parents?.includes(folder)||
     Number(file.size)!==c.size||file.sha256Checksum!==c.sha256)
     throw new Error('Drive could not confirm the name, size and SHA-256 for '+c.case_id+'. Select a dedicated study folder containing the original scans.');
 }
 
-async function inventory(folder:string,cases:PacketCase[],signal:AbortSignal) {
+async function inventory(folder:string,cases:DriveCaseImage[],signal:AbortSignal) {
   const expected=new Map(cases.map(c=>[c.case_id+'.nii.gz',c]));
   const found=new Map<string,DriveFile>();
   let pageToken='';
@@ -60,12 +67,13 @@ function fileLink(file:DriveFile) {
   return url.href;
 }
 
-export async function uploadPrivateFolder(packets:StudyPackets,folder:string,sessions:Map<string,UploadSession>,
+export async function uploadPrivateFolder(packets:DriveImagePackets,folder:string,sessions:Map<string,UploadSession>,
   signal:AbortSignal,progress:(text:string)=>void,publicAccess=false):Promise<Record<string,string>> {
   if(!validId.test(folder))throw new Error('Select a valid Google Drive folder.');
   await verifyFolder(folder);
   await checkSharing(folder,signal,publicAccess);
-  const existing=await inventory(folder,packets.cases,signal);
+  const folderCases=packets.cases.concat(packets.otherFolderCases??[]);
+  const existing=await inventory(folder,folderCases,signal);
   const links:Record<string,string>={};
   for(const [index,c] of packets.cases.entries()){
     signal.throwIfAborted();
@@ -86,7 +94,7 @@ export async function uploadPrivateFolder(packets:StudyPackets,folder:string,ses
     await checkSharing(file.id,signal,publicAccess);
     links[c.case_id]=fileLink(file);
   }
-  const final=await inventory(folder,packets.cases,signal);
+  const final=await inventory(folder,folderCases,signal);
   if(packets.cases.some(c=>!final.has(c.case_id)||links[c.case_id]!==fileLink(final.get(c.case_id)!)))
     throw new Error('The files in this folder changed during verification. Retry to confirm the links.');
   return links;
