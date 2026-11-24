@@ -186,6 +186,7 @@ test('three junior schedules are balanced, first opening starts timer, draft and
         assert.equal((await call(first,'PUT',url,draft)).version,1);
         const re=await call(first,'POST',url+'/open',{period:1});
         assert.equal(re.report,draft.report);assert.equal(re.started_at,new Date(100000000).toISOString());
+        assert.equal(re.draft,cases.find(row=>row.case_id===c.case_id).draft);
         await fail(call(first,'PUT',url,{...draft,report:'Different stale text'}),409);
         await fail(call(first,'PUT',url,{...draft,version:1,submit:true}),400);version=1;
       }

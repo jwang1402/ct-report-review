@@ -21,7 +21,9 @@ In [Study A results](https://jwang1402.github.io/ct-report-review/#/admin/result
 
 Each senior writes one unaided report for each CT. Each junior reads all ten CTs twice. Each junior receives five AI drafts and five blank editors in the first session. The second session reverses the condition for every case. It becomes available 28 days after the junior's final submission in the first session and requires a new name confirmation.
 
-Opening a CT starts the server timer. Readers can save their own drafts and resume them. The clock includes image loading, breaks and editing, and stops on final submission. Open a case when ready to read it. Readers complete the present/absent checklist and specify laterality where applicable before signing the report. Final submissions are locked.
+Select a case from the list and choose **Open CT** when ready to begin. Opening the CT starts the server timer; it includes image loading, breaks and editing, and stops on final submission. Readers can save their own drafts and resume them. Submit the current reading before opening another CT.
+
+During an assisted reading, the original **MORPH-CT draft** is available for comparison. **Final report** begins with an editable copy and resumes with the reader’s saved text. During an unaided reading the final report starts blank. In both conditions, readers record their own present/absent findings and applicable laterality before submitting their final report.
 
 In **Readings and results**, use the independent reference to assess each final report. For each AI-assisted report, record which errors in the original draft were retained. The export includes the readings, timing, reader and case identifiers, assessments and paired analysis. Agreement uses the same cases and the same three juniors in both conditions. Reporting time uses paired readings by case and reader. Incomplete pairs and unassessed outcomes remain distinguishable from zero errors.
 
