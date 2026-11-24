@@ -18,7 +18,7 @@ export type Configuration={version:number;status:'draft'|'frozen';cases:CaseConf
 export type RecordedError={finding:string;reference_id?:string;type:'missed'|'unsupported'|'location'|'other';significant:boolean;detail:string};
 export type Assessment={version:number;errors:RecordedError[];accepted_draft_errors:string[]};
 export type ResultReading={
-  username:string;display_name:string;cohort:'junior'|'senior';case_id:string;period:number;condition:Condition;
+  username:string;display_name:string;cohort:'junior'|'senior';case_id:string;period:number;condition:Condition;version:number;
   started_at:string;submitted_at:string|null;elapsed_seconds:number|null;report:string;findings:FindingRecord;
   draft?:string;reference:string;draft_errors:CaseEntry[];assessment:Assessment|null
 };

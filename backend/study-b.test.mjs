@@ -1,8 +1,10 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
 import {DatabaseSync} from 'node:sqlite';
 import {readFileSync} from 'node:fs';
 import {routeStudyB,studyBImage} from './study-b.mjs';
+import {manageReaders,readerRoster} from './admin-doctor.mjs';
 import {findings} from './study-a.mjs';
 import {summarizeStudyB} from './study-b-analysis.mjs';
 
@@ -48,6 +50,108 @@ test('private cohort draft and atomic freeze; duplicate CT files and checksums r
   const modified=cases.map((c,i)=>i===0?{...c,sha256:'e'.repeat(64)}:c);
   await configure(1,true,modified);
   await fail(configure(2,false,modified),409);
+});
+
+function deleteRequest(reading) {
+  return {username:reading.username,case_id:reading.case_id,period:reading.period,
+    version:reading.version,assessment_version:reading.assessment?.version??0};
+}
+
+test('only administrators can delete the displayed reading revision; an immediate reopen rejects old edits and duplicate deletes',async t=>{
+  const {admin,adminPath,answers,call,configure,db,fail,path,sql,user}=fixture(t);
+  const reader=user('junior-a','junior');
+  const peer=user('senior-a','senior');
+  await configure(0,true);
+  const url=path+'/cases/B01';
+  const remove=(actor,key)=>call(actor,'DELETE',adminPath+'/readings',key);
+  const results=async()=>(await call(admin,'GET',adminPath+'/results')).readings;
+  const original=await call(reader,'POST',url+'/open',{period:1});
+  await call(peer,'POST',url+'/open',{period:1});
+  const initial=(await results()).find(r=>r.username===reader.username);
+  const oldRequest=deleteRequest(initial);
+  await fail(remove(reader,oldRequest),403);
+  await fail(remove(peer,oldRequest),403);
+  await fail(remove(admin,{...oldRequest,version:undefined}),400);
+  const firstSave={period:1,version:original.version,submit:false,report:'Reader draft',findings:{}};
+  await call(reader,'PUT',url,firstSave);
+  await fail(remove(admin,oldRequest),409);
+  const rows=await results();
+  const lastRequest=deleteRequest(rows.find(r=>r.username===reader.username));
+  const peerBefore=rows.find(r=>r.username===peer.username);
+  assert.deepEqual(await remove(admin,lastRequest),{deleted:true});
+  assert.deepEqual(await results(),[peerBefore]);
+  await fail(remove(admin,lastRequest),409);
+  const next=(await call(reader,'GET',path)).cases.find(c=>c.case_id==='B01');
+  assert.deepEqual(next,{case_id:'B01',submitted:false,started:false});
+  const reopened=await call(reader,'POST',url+'/open',{period:1});
+  assert.equal(reopened.condition,original.condition);
+  assert.equal(reopened.report,'');
+  assert(reopened.version>lastRequest.version);
+  await fail(remove(admin,lastRequest),409);
+  await fail(call(reader,'PUT',url,{...firstSave,version:lastRequest.version}),409);
+  await call(reader,'PUT',url,{period:1,version:reopened.version,submit:true,report:'Replacement report',findings:answers});
+  const replacement=(await results()).find(r=>r.username===reader.username);
+  const assessment={username:reader.username,case_id:'B01',period:1,version:0,errors:[],accepted_draft_errors:[]};
+  await fail(call(admin,'PUT',adminPath+'/assessment',assessment),409);
+  await call(admin,'PUT',adminPath+'/assessment',{...assessment,reading_version:replacement.version});
+  await fail(remove(admin,deleteRequest(replacement)),409);
+  assert.deepEqual((await results()).find(r=>r.username===peer.username),peerBefore);
+  // An administrator can still delete this entire reader through the original account endpoint.
+  const digest=text=>createHash('sha256').update(text).digest('hex');
+  const roster=await readerRoster(db,digest,(name,id)=>name??id);
+  const account=roster.find(r=>r.username===reader.username);
+  const removed=await manageReaders('/admin/doctors/'+account.username,{method:'DELETE'},db,{digest,
+    jsonBody:async()=>({version:account.version}),HttpError:Error});
+  assert.equal(removed.deleted,reader.username);
+  assert.deepEqual(await results(),[peerBefore]);
+  assert.equal(sql.prepare('SELECT count(*) n FROM study_b_reading_deletions WHERE username=?').get(reader.username).n,0);
+  assert.deepEqual(sql.prepare('PRAGMA foreign_key_check').all(),[]);
+});
+
+test('deleting assessed crossover readings changes only the named reader, case and session and preserves second-session eligibility',async t=>{
+  const {admin,adminPath,answers,call,cases,clock,configure,path,sql,user}=fixture(t);
+  const reader=user('junior-b','junior');
+  await configure(0,true);
+  async function submit(id,period){
+    const url=path+'/cases/'+id;
+    const reading=await call(reader,'POST',url+'/open',{period});
+    await call(reader,'PUT',url,{period,version:reading.version,submit:true,report:'Report for session '+period,findings:answers});
+  }
+  for(const c of cases)await submit(c.case_id,1);
+  const session2=100000+28*86400;
+  clock(session2);
+  reader.name_confirmed_at=session2;
+  await submit('B01',2);
+  // Upgrade a database where this reader entered session 2 before individual deletions were supported.
+  sql.exec('DROP TRIGGER study_b_record_second_session; DROP TABLE study_b_second_sessions;');
+  const migration=readFileSync(new URL('./migrations/0013_study_b_reading_deletions.sql',import.meta.url),'utf8');
+  sql.exec(migration);
+  sql.exec(migration);
+  const results=()=>call(admin,'GET',adminPath+'/results');
+  const assessment={username:reader.username,case_id:'B01',version:0,errors:[],accepted_draft_errors:[]};
+  for(const period of [1,2])await call(admin,'PUT',adminPath+'/assessment',{...assessment,period});
+  const before=await results();
+  const matching=before.readings.filter(r=>r.case_id==='B01');
+  assert.equal(matching.length,2);
+  assert(matching.every(r=>r.assessment?.version===1));
+  assert.equal(before.analysis.efficiency.complete_reader_case_pairs,1);
+  const remove=r=>call(admin,'DELETE',adminPath+'/readings',deleteRequest(r));
+  await remove(matching.find(r=>r.period===2));
+  const after=await results();
+  assert.deepEqual(after.readings,before.readings.filter(r=>r.period===1));
+  assert.equal(after.analysis.efficiency.complete_reader_case_pairs,0);
+  await remove(matching.find(r=>r.period===1));
+  assert.deepEqual((await results()).readings,after.readings.filter(r=>r.case_id!=='B01'));
+  const state=await call(reader,'GET',path);
+  assert.equal(state.period,2);
+  assert.equal(state.status,'ready');
+  assert.equal(state.opens_at,new Date(session2*1000).toISOString());
+  assert.equal((await call({...reader,name_confirmed_at:100000},'GET',path)).status,'confirm_name');
+  assert.equal((await call(admin,'GET',adminPath)).cases.find(c=>c.case_id==='B01').reference_locked,true);
+  await submit('B01',2);
+  const fresh=(await results()).readings.find(r=>r.case_id==='B01');
+  assert.equal(fresh.assessment,null);
+  assert.equal(fresh.condition,matching.find(r=>r.period===2).condition);
 });
 
 test('descriptive analysis pairs case/reader, accounts for draft error opportunities and zero denominators',()=>{

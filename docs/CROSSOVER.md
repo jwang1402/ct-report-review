@@ -27,4 +27,6 @@ Senior and junior readers both enter Study B through its workspace, which lists 
 
 In **Readings and results**, use the independent reference to assess each final report. For each AI-assisted report, record which errors in the original draft were retained. The export includes the readings, timing, reader and case identifiers, assessments and paired analysis. Agreement uses the same cases and the same three juniors in both conditions. Reporting time uses paired readings by case and reader. Incomplete pairs and unassessed outcomes remain distinguishable from zero errors.
 
+To remove a Study B reading, open **Results → Study B**, find the reader, case and session, then choose **Delete** on that row. Confirming permanently removes that reading’s report, findings, timing and any linked assessment from the results.
+
 If practice is approved, use two separate practice examinations before timed Study B readings. Keep practice cases and submissions outside the ten scored cases.

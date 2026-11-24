@@ -30,7 +30,7 @@ it('keeps the image and model draft fixed and only locks the reference for asses
   expect(assessed).not.toContain('Save reference');
 });
 it('routes unreferenced submitted cases to the expert reference editor before assessment',()=>{
-  const example:ResultReading={case_id:'B01',username:'reader01',display_name:'Reader',cohort:'senior',period:1,
+  const example:ResultReading={case_id:'B01',username:'reader01',display_name:'Reader',cohort:'senior',period:1,version:1,
     condition:'without_ai',started_at:'2026-01-01',submitted_at:'2026-01-02',elapsed_seconds:60,
     report:'Submitted report',findings:{},reference:'',draft_errors:[],assessment:null};
   function results(reference:string) {

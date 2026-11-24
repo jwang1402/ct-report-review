@@ -1,7 +1,7 @@
 import {useEffect,useRef,useState} from 'react';
 import {Link,useSearchParams} from 'react-router-dom';
 import {Check,Download,FolderOpen,LockKeyhole,Plus,RefreshCw,Upload,X} from 'lucide-react';
-import {api} from '../services/session';
+import {api,ResponseError} from '../services/session';
 import {useStudyData} from '../services/blindStudy';
 import {hashBlob} from '../services/fileHash';
 import {verifyPublicDriveCase} from '../services/publicDriveMedia';
@@ -237,7 +237,8 @@ function AssessmentForm({reading,c,onDone}:{reading:ResultReading;c:CaseConfig;o
     if(errors.some(e=>!e.finding.trim()||(e.type==='missed'&&!e.reference_id))){setMessage('Identify the affected finding for every error. Link missed findings to a reference item.');return;}
     setBusy(true);setMessage('');
     try{await api('/admin/study-b/assessment',{method:'PUT',body:JSON.stringify({
-      username:reading.username,case_id:reading.case_id,period:reading.period,version:original?.version??0,reference_version:c.reference_version??0,
+      username:reading.username,case_id:reading.case_id,period:reading.period,version:original?.version??0,
+      reading_version:reading.version,reference_version:c.reference_version??0,
       errors:errors.map(e=>({...e,finding:e.finding.trim()})),accepted_draft_errors:accepted
     })});setDirty(false);onDone();}
     catch(e){setMessage(message(e));}finally{setBusy(false);}
@@ -277,6 +278,25 @@ function AssessmentForm({reading,c,onDone}:{reading:ResultReading;c:CaseConfig;o
 function ResultsTab(){
   const {data,error,refresh}=useStudyData<Results&{analysis?:StudyBAnalysisData}>('/admin/study-b/results');
   const [selected,setSelected]=useState<ResultReading|null>(null);
+  const [deleting,setDeleting]=useState<ResultReading|null>(null);
+  const [notice,setNotice]=useState(''),[deleteError,setDeleteError]=useState('');
+  async function deleteReading(reading:ResultReading){
+    if(deleting)return;
+    const label=(reading.display_name||reading.username)+' · '+reading.case_id+' · Session '+reading.period;
+    if(!window.confirm('Delete the Study B reading for '+label+'?\n\nThis permanently removes the reader’s report, findings, timing and any saved assessment for this reading.'))return;
+    setDeleting(reading);setNotice('');setDeleteError('');
+    try{
+      const {username,case_id,period,version}=reading;
+      await api('/admin/study-b/readings',{method:'DELETE',body:JSON.stringify({
+        username,case_id,period,version,assessment_version:reading.assessment?.version??0
+      })});
+      setNotice('Reading deleted: '+label+'.');
+      refresh();
+    }catch(e){
+      setDeleteError(message(e));
+      if(e instanceof ResponseError&&(e.status===404||e.status===409))refresh();
+    }finally{setDeleting(null);}
+  }
   if(!data)return <p role={error?'alert':'status'}>{error??'Loading readings…'} {error&&<button className="button secondary" onClick={refresh}>Retry</button>}</p>;
   if(selected){
     const c=data.cases.find(x=>x.case_id===selected.case_id);
@@ -285,14 +305,19 @@ function ResultsTab(){
   const submitted=data.readings.filter(r=>r.submitted_at);
   return <><section className="work-card"><div className="sb-subhead"><div><h2>Readings and assessments</h2>
     <p className="sb-hint">{submitted.length} submitted · {submitted.filter(r=>r.assessment).length} assessed</p></div>
-    <div className="actions"><button className="button secondary" onClick={refresh}><RefreshCw size={14}/>Refresh</button>
-    <button className="button secondary" disabled={!submitted.length} onClick={()=>exportJSON(data,'study-b-private-results')}><Download size={14}/>Export results</button></div></div>
-    {data.readings.length?<div className="table-scroll"><table className="sb-assessment-list"><thead><tr><th>Reader</th><th>Case</th><th>Session</th><th>Condition</th><th>Time</th><th>Assessment</th></tr></thead>
+    <div className="actions"><button className="button secondary" disabled={!!deleting} onClick={refresh}><RefreshCw size={14}/>Refresh</button>
+    <button className="button secondary" disabled={!submitted.length||!!deleting} onClick={()=>exportJSON(data,'study-b-private-results')}><Download size={14}/>Export results</button></div></div>
+    {notice&&<p className="sb-admin-note" role="status">{notice}</p>}
+    {deleteError&&<p className="sb-admin-note error" role="alert">{deleteError}</p>}
+    {data.readings.length?<div className="table-scroll"><table className="sb-assessment-list"><thead><tr><th>Reader</th><th>Case</th><th>Session</th><th>Condition</th><th>Time</th><th>Assessment</th><th>Action</th></tr></thead>
       <tbody>{data.readings.map(r=><tr key={[r.username,r.period,r.case_id].join('/')}><td>{r.display_name||r.username}<small> · {r.cohort}</small></td>
         <td>{r.case_id}</td><td>{r.period}</td><td>{r.condition==='with_ai'?'With AI':'Without AI'}</td>
         <td>{r.elapsed_seconds!=null?(r.elapsed_seconds/60).toFixed(1)+' min':'In progress'}</td>
-        <td>{r.submitted_at?(r.reference.trim()?<button className="button secondary" onClick={()=>setSelected(r)}>{r.assessment?'View assessment':'Assess reading'}</button>:
+        <td>{r.submitted_at?(r.reference.trim()?<button className="button secondary" disabled={!!deleting} onClick={()=>setSelected(r)}>{r.assessment?'View assessment':'Assess reading'}</button>:
           <Link to={'/admin/upload?study=B&case='+r.case_id}>Add expert reference</Link>):'—'}</td>
+        <td><button className="button secondary" type="button" disabled={!!deleting}
+          aria-label={'Delete reading for '+(r.display_name||r.username)+', '+r.case_id+', session '+r.period}
+          onClick={()=>void deleteReading(r)}>{deleting===r?'Deleting…':'Delete'}</button></td>
       </tr>)}</tbody></table></div>:<p className="sb-admin-note">No readings have started.</p>}
   </section>{submitted.length>0&&<StudyBAnalysis readings={data.readings} overall={data.analysis}/>}</>;
 }

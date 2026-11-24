@@ -125,15 +125,15 @@ async function readerState(db,user,now) {
   const empty={period:1,opens_at:null,cases:[]};
   if(config.status!=='frozen') return {list:{...empty,status:'not_ready'}};
   const id=user.username;
-  const existing=await db.prepare('SELECT cohort,slot FROM study_b_readers WHERE username=?').bind(id).first();
+  const existing=await db.prepare('SELECT cohort,slot,opens_at FROM study_b_readers LEFT JOIN study_b_second_sessions USING(username) WHERE username=?').bind(id).first();
   const slot=existing?.slot;
   if(existing)check(existing.cohort===user.cohort,409,'This reading identity belongs to another reader group.');
   const rows=(await db.prepare('SELECT case_id,period,submitted_at FROM study_b_readings WHERE username=?').bind(id).all()).results;
   const p1=rows.filter(r=>r.period===1 && r.submitted_at!==null);
   let period=1, opens=null;
-  if(p1.length===10){
+  if(p1.length===10 || existing?.opens_at!=null){
     if(user.cohort==='senior') return {list:{...empty,status:'complete'}};
-    period=2; opens=Math.max(...p1.map(r=>r.submitted_at))+washoutSeconds;
+    period=2; opens=existing?.opens_at??Math.max(...p1.map(r=>r.submitted_at))+washoutSeconds;
     if(now<opens) return {list:{...empty,status:'washout',period,opens_at:date(opens)}};
     if(!Number.isFinite(user.name_confirmed_at)||user.name_confirmed_at<opens)
       return {list:{...empty,status:'confirm_name',period,opens_at:date(opens)}};
@@ -177,9 +177,16 @@ async function openCase(db,user,caseId,body,now) {
     slot=(await db.prepare('SELECT slot FROM study_b_readers WHERE username=?').bind(user.username).first()).slot;
   }
   const condition=assignment(user.cohort,slot,state.config.order,caseId,period);
-  // Both the read identity and the single ongoing timer are guarded by unique indexes.
-  await db.prepare('INSERT INTO study_b_readings(username,case_id,period,arm,started_at,report) VALUES(?,?,?,?,?,?) ON CONFLICT DO NOTHING')
-    .bind(user.username,caseId,period,condition,now,'').run();
+  const key=[user.username,caseId,period];
+  // Recheck period eligibility in the same statement as opening. An administrator
+  // can remove a first-period submission after readerState was fetched.
+  const eligible=period===1?'NOT EXISTS (SELECT 1 FROM study_b_second_sessions WHERE username=?)':
+    `COALESCE((SELECT opens_at FROM study_b_second_sessions WHERE username=?),
+      (SELECT MAX(submitted_at)+? FROM study_b_readings WHERE username=? AND period=1 HAVING COUNT(submitted_at)=10))<=?`;
+  const cutoffBindings=period===1?[user.username]:[user.username,washoutSeconds,user.username,Math.min(now,user.name_confirmed_at)];
+  await db.prepare(`INSERT INTO study_b_readings(username,case_id,period,arm,started_at,report,version)
+    SELECT ?,?,?,?,?,'',COALESCE((SELECT next_version FROM study_b_reading_deletions WHERE username=? AND case_id=? AND period=?),0)
+    WHERE ${eligible} ON CONFLICT DO NOTHING`).bind(...key,condition,now,...key,...cutoffBindings).run();
   const row=await db.prepare('SELECT * FROM study_b_readings WHERE username=? AND case_id=? AND period=?')
     .bind(user.username,caseId,period).first();
   check(row,409,'Resume and submit the current reading before opening another CT.');
@@ -232,7 +239,7 @@ async function results(db,selection) {
   const config=await adminConfig(db);
   const readings=out.results.map(r=>{
     const c=config.cases.find(item=>item.case_id===r.case_id);
-    return {username:r.username,display_name:r.display_name,cohort:r.cohort,case_id:r.case_id,period:r.period,condition:r.arm,
+    return {username:r.username,display_name:r.display_name,cohort:r.cohort,case_id:r.case_id,period:r.period,version:r.version,condition:r.arm,
       started_at:date(r.started_at),submitted_at:date(r.submitted_at),elapsed_seconds:r.submitted_at==null?null:r.submitted_at-r.started_at,
       report:readerReport(r,c),findings:JSON.parse(r.findings_json),reference:c.reference,reference_findings:c.reference_findings,
       draft:c.draft,draft_errors:c.draft_errors,assessment:parsedAssessment(r)};
@@ -248,13 +255,31 @@ async function results(db,selection) {
   }
   return {cases:config.cases,readings,analysis:summarizeStudyB(readings,config.cases)};
 }
+async function deleteReading(db,data) {
+  check(object(data) && typeof data.username==='string' && data.username.length>0 && data.username.length<=128 &&
+    typeof data.case_id==='string' && casePattern.test(data.case_id) && [1,2].includes(data.period) &&
+    Number.isSafeInteger(data.version) && data.version>=0 && Number.isSafeInteger(data.assessment_version) && data.assessment_version>=0,
+    400,'Select a reading from the current Study B results.');
+  const key=[data.username,data.case_id,data.period];
+  // The matching assessment is removed by its composite foreign key.
+  const removed=await db.prepare(`DELETE FROM study_b_readings WHERE username=? AND case_id=? AND period=? AND version=?
+    AND COALESCE((SELECT version FROM study_b_assessments WHERE username=? AND case_id=? AND period=?),0)=?
+    RETURNING case_id`).bind(...key,data.version,...key,data.assessment_version).first();
+  check(removed,409,'This reading or its assessment changed. Refresh the results before deleting.');
+  return {deleted:true};
+}
 async function assess(db,user,data,now) {
   check(object(data) && casePattern.test(data.case_id) && [1,2].includes(data.period) && typeof data.username==='string' &&
     Number.isInteger(data.version) && data.version>=0,400,'Invalid assessment.');
   const key=[data.username,data.case_id,data.period];
-  const row=await db.prepare('SELECT arm FROM study_b_readings WHERE username=? AND case_id=? AND period=? AND submitted_at IS NOT NULL')
+  const row=await db.prepare(`SELECT r.arm,r.version,d.next_version FROM study_b_readings r
+    LEFT JOIN study_b_reading_deletions d USING(username,case_id,period)
+    WHERE username=? AND case_id=? AND period=? AND submitted_at IS NOT NULL`)
     .bind(...key).first();
   check(row,409,'Submit the independent reading before assessing it.');
+  // Allow older assessment forms only for a reading which has never been deleted.
+  check(data.reading_version===row.version || (data.reading_version===undefined && row.next_version==null),
+    409,'This reading changed. Reload the results before assessing it.');
   const c=(await adminConfig(db)).cases.find(c=>c.case_id===data.case_id);
   check(c?.reference.trim(),409,'Add the independent expert reference before assessing this case.');
   const expected=Object.hasOwn(data,'reference_version')?data.reference_version:0;
@@ -271,11 +296,13 @@ async function assess(db,user,data,now) {
   check(Array.isArray(accepted) && new Set(accepted).size===accepted.length &&
     accepted.every(id=>row.arm==='with_ai' && c.draft_errors.some(e=>e.id===id)),400,'Select only draft errors available in this reading.');
   const params=[JSON.stringify(errors),JSON.stringify(accepted),user.username,now];
+  const sameReading='EXISTS (SELECT 1 FROM study_b_readings WHERE username=? AND case_id=? AND period=? AND version=? AND submitted_at IS NOT NULL)';
   const saved=data.version===0?
     await db.prepare(`INSERT INTO study_b_assessments(username,case_id,period,version,errors_json,accepted_json,assessor,assessed_at)
-      SELECT ?,?,?,1,?,?,?,? WHERE COALESCE((SELECT version FROM study_b_case_references WHERE case_id=?),0)=?
-      ON CONFLICT DO NOTHING RETURNING version`).bind(...key,...params,data.case_id,expected).first():
-    await db.prepare('UPDATE study_b_assessments SET errors_json=?,accepted_json=?,assessor=?,assessed_at=?,version=version+1 WHERE username=? AND case_id=? AND period=? AND version=? RETURNING version').bind(...params,...key,data.version).first();
+      SELECT ?,?,?,1,?,?,?,? WHERE COALESCE((SELECT version FROM study_b_case_references WHERE case_id=?),0)=? AND ${sameReading}
+      ON CONFLICT DO NOTHING RETURNING version`).bind(...key,...params,data.case_id,expected,...key,row.version).first():
+    await db.prepare(`UPDATE study_b_assessments SET errors_json=?,accepted_json=?,assessor=?,assessed_at=?,version=version+1
+      WHERE username=? AND case_id=? AND period=? AND version=? AND ${sameReading} RETURNING version`).bind(...params,...key,data.version,...key,row.version).first();
   check(saved,409,'The reference or assessment has changed. Reload the results.');
   return {version:saved.version};
 }
@@ -287,6 +314,7 @@ export async function routeStudyB(path,request,user,db,{jsonBody,now}) {
     if(path==='/admin/study-b' && request.method==='PUT')return configure(db,await jsonBody(request,1500000));
     if(path==='/admin/study-b/references' && request.method==='PUT')return saveReference(db,await jsonBody(request,1500000));
     if(path==='/admin/study-b/results' && request.method==='GET')return results(db);
+    if(path==='/admin/study-b/readings' && request.method==='DELETE')return deleteReading(db,await jsonBody(request,2048));
     if(path==='/admin/study-b/analysis' && request.method==='POST')return results(db,await jsonBody(request,4096));
     if(path==='/admin/study-b/assessment' && request.method==='PUT')return assess(db,user,await jsonBody(request,220000),now);
     throw new StudyError(404,'Unknown Study B endpoint.');
