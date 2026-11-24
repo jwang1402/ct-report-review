@@ -39,6 +39,35 @@ async function getConfig(db) {
   const row=await db.prepare('SELECT * FROM study_b_cohort WHERE id=1').first();
   return {status:row.frozen?'frozen':'draft',version:row.version,cases:JSON.parse(row.cases_json),order:JSON.parse(row.order_json)};
 }
+async function adminConfig(db) {
+  const {status,version,cases}=await getConfig(db);
+  const {results}=await db.prepare('SELECT case_id,reference_json,version,locked FROM study_b_case_references').all();
+  const references=new Map(results.map(r=>[r.case_id,r]));
+  return {status,version,cases:cases.map(c=>{
+    const r=references.get(c.case_id);
+    return {...c,...(r?.reference_json?JSON.parse(r.reference_json):{}),
+      reference_version:r?.version??0,reference_locked:Boolean(r?.locked)};
+  })};
+}
+function referenceFields(c) {
+  return {reference:textValue(c.reference,48000),reference_findings:items(c.reference_findings??[]),
+    draft_errors:items(c.draft_errors??[])};
+}
+async function saveReference(db,data) {
+  check(object(data) && casePattern.test(data.case_id) && Number.isSafeInteger(data.version) && data.version>=0 &&
+    ['reference','reference_findings','draft_errors'].every(k=>Object.hasOwn(data,k)),400,'Supply the case, reference fields and saved reference version.');
+  const config=await getConfig(db);
+  check(config.status==='frozen',409,'Open the study before editing references separately.');
+  check(config.cases.some(c=>c.case_id===data.case_id),404,'Unknown case.');
+  const ref=JSON.stringify(referenceFields(data));
+  const saved=data.version===0?
+    await db.prepare('INSERT INTO study_b_case_references(case_id,reference_json,version) VALUES(?,?,1) ON CONFLICT(case_id) DO NOTHING RETURNING version')
+      .bind(data.case_id,ref).first():
+    await db.prepare('UPDATE study_b_case_references SET reference_json=?,version=version+1 WHERE case_id=? AND version=? AND locked=0 RETURNING version')
+      .bind(ref,data.case_id,data.version).first();
+  check(saved,409,'This reference has changed or has been used for assessment. Reload the case.');
+  return adminConfig(db);
+}
 async function configure(db,data) {
   check(object(data) && Array.isArray(data.cases) && data.cases.length<=10 && Number.isInteger(data.version) &&
     typeof data.freeze==='boolean',400,'Supply the saved version, the case list, and the freeze option.');
@@ -71,9 +100,7 @@ async function configure(db,data) {
       hashes.add(sha);
     }
     check(Number.isSafeInteger(size) && size>=0 && size<2**31 && (!freeze || size>2),400,'Provide the NIfTI file size in bytes.');
-    return {case_id:c.case_id,drive_url:url,sha256:sha,size,draft:textValue(c.draft,48000,freeze),
-      reference:textValue(c.reference,48000,freeze),reference_findings:items(c.reference_findings??[]),
-      draft_errors:items(c.draft_errors??[])};
+    return {case_id:c.case_id,drive_url:url,sha256:sha,size,draft:textValue(c.draft,48000,freeze),...referenceFields(c)};
   }).sort((a,b)=>a.case_id.localeCompare(b.case_id));
   const serialized=JSON.stringify(cases);
   check(new TextEncoder().encode(serialized).length<1500000,400,'The case manifest is too large.');
@@ -193,11 +220,11 @@ function parsedAssessment(r) {
     accepted_draft_errors:JSON.parse(r.accepted_json),assessor:r.assessor,assessed_at:date(r.assessed_at)};
 }
 async function results(db,selection) {
-  const config=await getConfig(db);
   const out=await db.prepare(`SELECT r.*,p.cohort,c.display_name,a.version AS assessment_version,a.errors_json,
     a.accepted_json,a.assessor,a.assessed_at FROM study_b_readings r JOIN study_b_readers p USING(username)
     LEFT JOIN crossover_readers c USING(username) LEFT JOIN study_b_assessments a USING(username,case_id,period)
     ORDER BY r.case_id,r.period,r.username`).all();
+  const config=await adminConfig(db);
   const readings=out.results.map(r=>{
     const c=config.cases.find(item=>item.case_id===r.case_id);
     return {username:r.username,display_name:r.display_name,cohort:r.cohort,case_id:r.case_id,period:r.period,condition:r.arm,
@@ -223,7 +250,10 @@ async function assess(db,user,data,now) {
   const row=await db.prepare('SELECT arm FROM study_b_readings WHERE username=? AND case_id=? AND period=? AND submitted_at IS NOT NULL')
     .bind(...key).first();
   check(row,409,'Submit the independent reading before assessing it.');
-  const c=(await getConfig(db)).cases.find(c=>c.case_id===data.case_id);
+  const c=(await adminConfig(db)).cases.find(c=>c.case_id===data.case_id);
+  check(c?.reference.trim(),409,'Add the independent expert reference before assessing this case.');
+  const expected=Object.hasOwn(data,'reference_version')?data.reference_version:0;
+  check(c.reference_version===expected,409,'The reference has changed. Reload the assessment.');
   check(Array.isArray(data.errors) && data.errors.length<=180,400,'Provide a list of errors.');
   const errors=data.errors.map(e=>{
     check(object(e) && ['missed','unsupported','location','other'].includes(e.type) &&
@@ -237,19 +267,20 @@ async function assess(db,user,data,now) {
     accepted.every(id=>row.arm==='with_ai' && c.draft_errors.some(e=>e.id===id)),400,'Select only draft errors available in this reading.');
   const params=[JSON.stringify(errors),JSON.stringify(accepted),user.username,now];
   const saved=data.version===0?
-    await db.prepare('INSERT INTO study_b_assessments(username,case_id,period,version,errors_json,accepted_json,assessor,assessed_at) VALUES(?,?,?,1,?,?,?,?) ON CONFLICT DO NOTHING RETURNING version').bind(...key,...params).first():
+    await db.prepare(`INSERT INTO study_b_assessments(username,case_id,period,version,errors_json,accepted_json,assessor,assessed_at)
+      SELECT ?,?,?,1,?,?,?,? WHERE COALESCE((SELECT version FROM study_b_case_references WHERE case_id=?),0)=?
+      ON CONFLICT DO NOTHING RETURNING version`).bind(...key,...params,data.case_id,expected).first():
     await db.prepare('UPDATE study_b_assessments SET errors_json=?,accepted_json=?,assessor=?,assessed_at=?,version=version+1 WHERE username=? AND case_id=? AND period=? AND version=? RETURNING version').bind(...params,...key,data.version).first();
-  check(saved,409,'The assessment has changed. Reload the results.');
+  check(saved,409,'The reference or assessment has changed. Reload the results.');
   return {version:saved.version};
 }
 
 export async function routeStudyB(path,request,user,db,{jsonBody,now}) {
   if(path==='/admin/study-b'||path.startsWith('/admin/study-b/')){
     check(user.role==='admin',403,'Administrator access required.');
-    if(path==='/admin/study-b' && request.method==='GET'){
-      const {status,version,cases}=await getConfig(db);return {status,version,cases};
-    }
+    if(path==='/admin/study-b' && request.method==='GET')return adminConfig(db);
     if(path==='/admin/study-b' && request.method==='PUT')return configure(db,await jsonBody(request,1500000));
+    if(path==='/admin/study-b/references' && request.method==='PUT')return saveReference(db,await jsonBody(request,1500000));
     if(path==='/admin/study-b/results' && request.method==='GET')return results(db);
     if(path==='/admin/study-b/analysis' && request.method==='POST')return results(db,await jsonBody(request,4096));
     if(path==='/admin/study-b/assessment' && request.method==='PUT')return assess(db,user,await jsonBody(request,220000),now);

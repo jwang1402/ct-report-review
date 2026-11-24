@@ -58,7 +58,6 @@ function ConfigEditor({data,active,driveBusy,setDriveBusy}:{data:Configuration}&
   const [params,setParams]=useSearchParams();
   const requested=params.get('case');
   const [id,select]=useState(requested&&caseIds.includes(requested)?requested:'B01');
-  useEffect(()=>{if(active&&requested&&caseIds.includes(requested))select(requested);},[active,requested]);
   const [dirty,setDirty]=useState(false),[busy,setBusy]=useState(false);
   const [retrySave,setRetrySave]=useState(false);
   const [error,setError]=useState(''),[notice,setNotice]=useState('');
@@ -70,9 +69,12 @@ function ConfigEditor({data,active,driveBusy,setDriveBusy}:{data:Configuration}&
   useEffect(()=>()=>operations.current?.abort(),[]);
   useWarn(dirty||busy||driveBusy);
   const frozen=saved.status==='frozen';
+  const editingReference=frozen&&dirty;
+  useEffect(()=>{if(active&&!editingReference&&requested&&caseIds.includes(requested))select(requested);},[active,requested,editingReference]);
   const uploaded=studyBUploadCount(saved.cases);
-  const canOpen=studyBUploadCount(rows)===caseIds.length&&rows.every(c=>c.reference.trim());
+  const canOpen=studyBUploadCount(rows)===caseIds.length;
   const row=rows.find(x=>x.case_id===id)??blankCase(id);
+  const referenceLocked=!!row.reference_locked;
   const savedLink=saved.cases.find(c=>c.case_id===id)?.drive_url;
   function chooseCase(value:string){
     select(value);setParams({study:'B',case:value},{replace:true});setNotice('');
@@ -88,10 +90,19 @@ function ConfigEditor({data,active,driveBusy,setDriveBusy}:{data:Configuration}&
     setSaved(receipt);setRows(receipt.cases);setDirty(false);setRetrySave(false);
   }
   async function save(freeze:boolean){
-    if(freeze&&!window.confirm('Freeze these 10 cases, reference findings, and model drafts and open Study B to readers?'))return;
+    if(freeze&&!window.confirm('Open Study B to readers and lock the ten CTs and their model drafts?'))return;
     setBusy(true);setError('');
     try{await persist(rows,freeze);setNotice(freeze?'Study B is open to readers.':'Changes saved.');}
     catch(e){setError(message(e));}finally{setBusy(false);}
+  }
+  async function saveReference(){
+    setBusy(true);setError('');setNotice('');
+    try{
+      const {case_id,reference,reference_findings,draft_errors}=row;
+      const receipt:Configuration=await api('/admin/study-b/references',{method:'PUT',
+        body:JSON.stringify({version:row.reference_version??0,case_id,reference,reference_findings,draft_errors})});
+      setSaved(receipt);setRows(receipt.cases);setDirty(false);setNotice('Reference saved for '+case_id+'.');
+    }catch(e){setError(message(e));}finally{setBusy(false);}
   }
   async function inspect(file:File){
     setBusy(true);setError('');setNotice('Reading CT file…');
@@ -177,7 +188,7 @@ function ConfigEditor({data,active,driveBusy,setDriveBusy}:{data:Configuration}&
     {(error||notice||retrySave)&&<div className="sb-statusline">{error&&<p className="error" role="alert">{error}</p>}{notice&&<p role="status">{notice}</p>}
       {retrySave&&<button type="button" className="button secondary" disabled={busy||driveBusy} onClick={()=>void save(false)}>Retry save</button>}</div>}
     <fieldset className="sb-admin-fields" disabled={busy||driveBusy}>
-      <div className="actions"><label className="sb-compact">Examination<select value={id} onChange={e=>chooseCase(e.target.value)}>{caseIds.map(x=><option key={x}>{x}</option>)}</select></label>
+      <div className="actions"><label className="sb-compact">Examination<select value={id} disabled={editingReference} onChange={e=>chooseCase(e.target.value)}>{caseIds.map(x=><option key={x}>{x}</option>)}</select></label>
       {savedLink&&driveFileId(savedLink)&&<a className="button secondary" href={savedLink} target="_blank" rel="noreferrer">Open CT in Drive</a>}</div>
       <details className="sb-advanced"><summary>Advanced import and CT links</summary>
       <div className="sb-advanced-body">
@@ -193,12 +204,16 @@ function ConfigEditor({data,active,driveBusy,setDriveBusy}:{data:Configuration}&
       {verified[id]===[row.drive_url,row.size,row.sha256].join('|')&&<span className="badge">Verified</span>}</div>
       </div></details>
       <label>MORPH-CT draft<textarea rows={5} maxLength={48000} value={row.draft} readOnly={frozen} onChange={e=>update({draft:e.target.value})}/></label>
-      <label>Independent expert reference<textarea rows={5} maxLength={48000} value={row.reference} readOnly={frozen} onChange={e=>update({reference:e.target.value})}/></label>
-      <EntryList title="Reference key findings" prefix="ref-" items={row.reference_findings} change={v=>update({reference_findings:v})} readOnly={frozen}/>
-      <EntryList title="Errors in the original draft" prefix="err-" items={row.draft_errors} change={v=>update({draft_errors:v})} readOnly={frozen}/>
-      {!frozen&&<><p className="sb-hint">{rows.filter(c=>c.reference.trim()).length}/10 independent expert references entered. Complete the references before opening Study B to readers.</p>
-        <div className="sb-admin-tools"><button type="button" className="button secondary" disabled={!dirty} onClick={()=>void save(false)}>Save changes</button>
-        <button type="button" className="button primary" disabled={!canOpen} onClick={()=>void save(true)}><LockKeyhole size={14}/>Freeze and open study</button></div></>}
+      <label>Independent expert reference<textarea rows={5} maxLength={48000} value={row.reference} readOnly={referenceLocked} onChange={e=>update({reference:e.target.value})}/></label>
+      <p className="sb-hint">{referenceLocked?'Reference locked after the first assessment for this case.':
+        'You can add the reference before assessing this case.'} {saved.cases.filter(c=>c.reference.trim()).length}/10 references saved.</p>
+      <EntryList title="Reference key findings" prefix="ref-" items={row.reference_findings} change={v=>update({reference_findings:v})} readOnly={referenceLocked}/>
+      <EntryList title="Errors in the original draft" prefix="err-" items={row.draft_errors} change={v=>update({draft_errors:v})} readOnly={referenceLocked}/>
+      {frozen?<div className="sb-admin-tools">
+        {editingReference&&<button type="button" className="button secondary" onClick={()=>{setRows(saved.cases);setDirty(false);setError('');}}>Discard edits</button>}
+        {!referenceLocked&&<button type="button" className="button primary" disabled={!dirty} onClick={()=>void saveReference()}>Save reference</button>}
+      </div>:<div className="sb-admin-tools"><button type="button" className="button secondary" disabled={!dirty} onClick={()=>void save(false)}>Save changes</button>
+        <button type="button" className="button primary" disabled={!canOpen} onClick={()=>void save(true)}><LockKeyhole size={14}/>Open Study B to readers</button></div>}
     </fieldset></section>;
 }
 
@@ -222,7 +237,7 @@ function AssessmentForm({reading,c,onDone}:{reading:ResultReading;c:CaseConfig;o
     if(errors.some(e=>!e.finding.trim()||(e.type==='missed'&&!e.reference_id))){setMessage('Identify the affected finding for every error. Link missed findings to a reference item.');return;}
     setBusy(true);setMessage('');
     try{await api('/admin/study-b/assessment',{method:'PUT',body:JSON.stringify({
-      username:reading.username,case_id:reading.case_id,period:reading.period,version:original?.version??0,
+      username:reading.username,case_id:reading.case_id,period:reading.period,version:original?.version??0,reference_version:c.reference_version??0,
       errors:errors.map(e=>({...e,finding:e.finding.trim()})),accepted_draft_errors:accepted
     })});setDirty(false);onDone();}
     catch(e){setMessage(message(e));}finally{setBusy(false);}
@@ -265,7 +280,7 @@ function ResultsTab(){
   if(!data)return <p role={error?'alert':'status'}>{error??'Loading readings…'} {error&&<button className="button secondary" onClick={refresh}>Retry</button>}</p>;
   if(selected){
     const c=data.cases.find(x=>x.case_id===selected.case_id);
-    if(c)return <AssessmentForm key={[selected.username,selected.period,selected.case_id].join('/')} c={c} reading={selected} onDone={()=>{setSelected(null);refresh();}}/>;
+    if(c?.reference.trim())return <AssessmentForm key={[selected.username,selected.period,selected.case_id].join('/')} c={c} reading={selected} onDone={()=>{setSelected(null);refresh();}}/>;
   }
   const submitted=data.readings.filter(r=>r.submitted_at);
   return <><section className="work-card"><div className="sb-subhead"><div><h2>Readings and assessments</h2>
@@ -276,7 +291,8 @@ function ResultsTab(){
       <tbody>{data.readings.map(r=><tr key={[r.username,r.period,r.case_id].join('/')}><td>{r.display_name||r.username}<small> · {r.cohort}</small></td>
         <td>{r.case_id}</td><td>{r.period}</td><td>{r.condition==='with_ai'?'With AI':'Without AI'}</td>
         <td>{r.elapsed_seconds!=null?(r.elapsed_seconds/60).toFixed(1)+' min':'In progress'}</td>
-        <td>{r.submitted_at?<button className="button secondary" onClick={()=>setSelected(r)}>{r.assessment?'View assessment':'Assess reading'}</button>:'—'}</td>
+        <td>{r.submitted_at?(r.reference.trim()?<button className="button secondary" onClick={()=>setSelected(r)}>{r.assessment?'View assessment':'Assess reading'}</button>:
+          <Link to={'/admin/upload?study=B&case='+r.case_id}>Add expert reference</Link>):'—'}</td>
       </tr>)}</tbody></table></div>:<p className="sb-admin-note">No readings have started.</p>}
   </section>{submitted.length>0&&<StudyBAnalysis readings={data.readings} overall={data.analysis}/>}</>;
 }

@@ -92,6 +92,72 @@ test('descriptive analysis pairs case/reader, accounts for draft error opportuni
   assert.deepEqual(selected.junior_with_ai_vs_senior_without,a.junior_with_ai_vs_senior_without);
 });
 
+test('open and submit without references; later case-specific references remain private and lock at assessment',async t=>{
+  const {admin,adminPath,answers,call,cases,configure,db,fail,path,sql,user}=fixture(t);
+  const junior=user('j','junior');
+  const pending=cases.map(c=>({...c,reference:'',reference_findings:[],draft_errors:[]}));
+  await fail(configure(0,true,pending.map((c,i)=>i===0?{...c,draft:''}:c)),400);
+  const reference={case_id:'B01',version:0,reference:'Independent expert reading',
+    reference_findings:[{id:'n',description:'Expert finding'}],draft_errors:[]};
+  const refURL=adminPath+'/references';
+  await fail(call(admin,'PUT',refURL,reference),409);
+  await configure(0,true,pending);
+  const frozen=sql.prepare('SELECT * FROM study_b_cohort').get();
+  const image=path+'/cases/B01',assessment={case_id:'B01',username:'j',period:1,version:0,errors:[],accepted_draft_errors:[]};
+  await call(junior,'POST',image+'/open',{period:1});
+  await call(junior,'PUT',image,{period:1,version:0,submit:true,report:'Reader report.',findings:answers});
+  await fail(call(admin,'PUT',adminPath+'/assessment',assessment),409);
+  await fail(call(junior,'PUT',refURL,reference),403);
+  const first=await call(admin,'PUT',refURL,reference);
+  assert.equal(first.cases[0].reference_version,1);
+  assert.equal(first.cases[0].reference_locked,false);
+  await fail(call(admin,'PUT',refURL,{...reference,reference:'Stale update'}),409);
+  const result=await call(admin,'GET',adminPath+'/results');
+  assert.equal(result.readings[0].report,'Reader report.');
+  assert.equal(result.readings[0].reference,reference.reference);
+  assert.equal(result.readings[0].assessment,null);
+  await fail(call(admin,'PUT',adminPath+'/assessment',assessment),409);
+  const staleAssessment={...assessment,reference_version:1};
+  // Simulate a second coordinator committing a reference revision between validation and INSERT.
+  const prepare=db.prepare;
+  db.prepare=query=>{
+    if(query.includes('INSERT INTO study_b_assessments')){
+      sql.prepare('UPDATE study_b_case_references SET reference_json=?,version=version+1 WHERE case_id=?')
+        .run(JSON.stringify({reference:'Revised opinion',reference_findings:[],draft_errors:[]}),'B01');
+      db.prepare=prepare;
+    }
+    return prepare(query);
+  };
+  await fail(call(admin,'PUT',adminPath+'/assessment',staleAssessment),409);
+  assert.equal(sql.prepare('SELECT COUNT(*) n FROM study_b_assessments').get().n,0);
+  await call(admin,'PUT',adminPath+'/assessment',{...assessment,reference_version:2});
+  assert.equal((await call(admin,'GET',adminPath)).cases[0].reference_locked,true);
+  await fail(call(admin,'PUT',refURL,{...reference,version:2}),409);
+  const next=await call(admin,'PUT',refURL,{...reference,case_id:'B02'});
+  assert.equal(next.cases[1].reference_version,1);
+  assert.deepEqual(sql.prepare('SELECT * FROM study_b_cohort').get(),frozen);
+  const nextReading=await call(junior,'POST',path+'/cases/B02/open',{period:1});
+  assert.ok(!JSON.stringify(nextReading).includes(reference.reference));
+});
+
+test('reference migration locks previously assessed cases and preserves their original reference',async t=>{
+  const {sql,cases,admin,adminPath,answers,call,configure,fail,path,user}=fixture(t);
+  await configure(0,true);
+  const reader=user('s','senior');
+  await call(reader,'POST',path+'/cases/B01/open',{period:1});
+  await call(reader,'PUT',path+'/cases/B01',{period:1,version:0,submit:true,report:'Reader opinion',findings:answers});
+  sql.exec('DROP TRIGGER study_b_lock_assessed_reference; DROP TABLE study_b_case_references;');
+  sql.prepare("INSERT INTO study_b_assessments VALUES('s','B01',1,1,'[]','[]','admin',100000)").run();
+  const migration=readFileSync(new URL('./migrations/0012_study_b_case_references.sql',import.meta.url),'utf8');
+  sql.exec(migration);sql.exec(migration);
+  const list=await call(admin,'GET',adminPath);
+  assert.equal(list.cases[0].reference,cases[0].reference);
+  assert.equal(list.cases[0].reference_locked,true);
+  assert.equal(list.cases[1].reference_locked,false);
+  sql.prepare("DELETE FROM study_b_assessments WHERE case_id='B01'").run();
+  await fail(call(admin,'PUT',adminPath+'/references',{...cases[0],version:0}),409);
+});
+
 test('three junior schedules are balanced, first opening starts timer, draft and final writes are versioned; second period enforces name re-entry and flips exposure',async t=>{
   const {db,sql,cases,path,adminPath,admin,call,user,fail,clock,answers,configure}=fixture(t);
   await configure(0,true);

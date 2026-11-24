@@ -47,9 +47,11 @@ try{
   for(const failFirst of [false,true]){
     const context=await browser.newContext(),page=await context.newPage();
     const writes=[],errors=[];
-    let saved=[],version=0;
+    let saved=[],version=0,status='draft';
+    const references=[];
     page.setDefaultTimeout(12000);
     page.on('pageerror',e=>errors.push(e.message));
+    page.on('dialog',dialog=>dialog.accept());
     await page.addInitScript(()=>{
       sessionStorage.setItem('ct-review-session','test');
       window.batchUploads=0;window.verifiedCases=[];
@@ -61,13 +63,22 @@ try{
       const path=url.pathname.slice(5);
       if(path==='/session')return route.fulfill({json:{username:'example',role:'admin'}});
       if(path==='/admin/study-b'){
-        if(request.method()==='GET')return route.fulfill({json:{cases:saved,status:'draft',version}});
+        if(request.method()==='GET')return route.fulfill({json:{cases:saved,status,version}});
         const payload=request.postDataJSON();
         writes.push(payload);
         if(failFirst&&writes.length===1)return route.fulfill({status:503,json:{error:'Temporary synthetic error'}});
         assert.equal(payload.version,version);
         saved=payload.cases;
-        return route.fulfill({json:{version:++version,status:'draft',cases:saved}});
+        if(payload.freeze)status='frozen';
+        return route.fulfill({json:{version:++version,status,cases:saved}});
+      }
+      if(path==='/admin/study-b/references'){
+        const payload=request.postDataJSON(),record=saved.find(row=>row.case_id===payload.case_id);
+        assert.equal(status,'frozen');assert.equal(payload.version,record.reference_version??0);
+        references.push(payload);
+        Object.assign(record,{reference:payload.reference,reference_findings:payload.reference_findings,
+          draft_errors:payload.draft_errors,reference_version:payload.version+1,reference_locked:false});
+        return route.fulfill({json:{version,status,cases:saved}});
       }
       if(path==='/blind/cases')return route.fulfill({json:{cases:[]}});
       return route.fulfill({json:{doctors:[],studies:[],ready:false}});
@@ -110,6 +121,21 @@ try{
     await page.goto(base+'/#/admin');
     await inventory.getByText('10 / 10 cases uploaded',{exact:true}).waitFor();
     await inventory.getByText('Not open to readers',{exact:true}).waitFor();
+    await page.goto(base+'/#/admin/upload?study=B&case=B05');
+    await button('Open Study B to readers').click();
+    await page.getByText('10/10 cases uploaded · Open to readers',{exact:true}).waitFor();
+    assert.equal(writes.at(-1).freeze,true);
+    assert(saved.every(c=>c.reference===''&&c.reference_findings.length===0&&c.draft_errors.length===0));
+    const reference=page.getByRole('textbox',{name:'Independent expert reference',exact:true});
+    assert.equal(await reference.inputValue(),'');
+    assert.equal(await page.getByRole('textbox',{name:/MORPH-CT draft/}).isEditable(),false);
+    await reference.fill('Independent reference for B05.');
+    await Promise.all([page.waitForResponse(res=>res.url().endsWith('/admin/study-b/references')&&res.ok()),button('Save reference').click()]);
+    assert.equal(references.length,1);
+    await page.reload();await reference.waitFor();
+    assert.equal(await reference.inputValue(),'Independent reference for B05.');
+    assert.equal(saved.filter(c=>c.reference).length,1);
+    assert.equal(await page.getByRole('textbox',{name:/MORPH-CT draft/}).inputValue(),'Synthetic report B05');
     assert.deepEqual(errors,[]);
     await context.close();
   }

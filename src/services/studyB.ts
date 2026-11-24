@@ -13,7 +13,7 @@ export type Reading={
 };
 export type CaseEntry={id:string;description:string};
 export type CaseConfig={case_id:string;drive_url:string;sha256:string;size:number;draft:string;reference:string;
-  reference_findings:CaseEntry[];draft_errors:CaseEntry[]};
+  reference_findings:CaseEntry[];draft_errors:CaseEntry[];reference_version?:number;reference_locked?:boolean};
 export type Configuration={version:number;status:'draft'|'frozen';cases:CaseConfig[]};
 export type RecordedError={finding:string;reference_id?:string;type:'missed'|'unsupported'|'location'|'other';significant:boolean;detail:string};
 export type Assessment={version:number;errors:RecordedError[];accepted_draft_errors:string[]};
