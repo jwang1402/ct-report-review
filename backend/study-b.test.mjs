@@ -154,6 +154,36 @@ test('deleting assessed crossover readings changes only the named reader, case a
   assert.equal(fresh.condition,matching.find(r=>r.period===2).condition);
 });
 
+test('deleting a first-session submission while the first second-session reading opens enforces washout again',async t=>{
+  const {answers,call,cases,clock,configure,db,fail,path,sql,user}=fixture(t);
+  const reader=user('junior-c','junior');
+  await configure(0,true);
+  for(const {case_id} of cases){
+    const url=path+'/cases/'+case_id;
+    const entry=await call(reader,'POST',url+'/open',{period:1});
+    await call(reader,'PUT',url,{period:1,version:entry.version,submit:true,report:'First reading',findings:answers});
+  }
+  const secondStart=100000+28*86400;
+  clock(secondStart);
+  reader.name_confirmed_at=secondStart;
+  const prepare=db.prepare;
+  db.prepare=query=>{
+    if(query.includes('INSERT INTO study_b_readings')){
+      sql.prepare('DELETE FROM study_b_readings WHERE username=? AND case_id=? AND period=1').run(reader.username,'B01');
+      db.prepare=prepare;
+    }
+    return prepare(query);
+  };
+  await fail(call(reader,'POST',path+'/cases/B02/open',{period:2}),409);
+  assert.equal((await call(reader,'GET',path)).period,1);
+  const url=path+'/cases/B01';
+  const replacement=await call(reader,'POST',url+'/open',{period:1});
+  await call(reader,'PUT',url,{period:1,version:replacement.version,submit:true,report:'Replacement',findings:answers});
+  const washout=await call(reader,'GET',path);
+  assert.equal(washout.status,'washout');
+  assert.equal(washout.opens_at,new Date((secondStart+28*86400)*1000).toISOString());
+});
+
 test('descriptive analysis pairs case/reader, accounts for draft error opportunities and zero denominators',()=>{
   const cases=[{case_id:'B01'},{case_id:'B02'}];
   const rows=[];
